@@ -10,3 +10,14 @@ wheels/
 .venv
 datasets.db
 .pdm-build/
+data/
+*.zip
+*.json
+*.csv
+*.tsv
+*.parquet
+*.nc
+*.nc4
+*.nc4.gz
+*.nc4.gz.part
+*.nc4.gz.part.1
