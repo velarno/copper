@@ -2,6 +2,9 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 import pandas as pd
+import json
+import re
+import html
 
 class DatasetResult(BaseModel):
     score: Optional[float] = Field(None, description="Full-text search score (BM25)", example=12.34)
@@ -10,7 +13,7 @@ class DatasetResult(BaseModel):
     abs_link: Optional[str] = Field(None, description="Absolute link to the dataset page", example="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels")
     title: Optional[str] = Field(None, description="Dataset title", example="ERA5 hourly data on single levels from 1940 to present")
     description: Optional[str] = Field(None, description="Dataset description", example="ERA5 is the fifth generation ECMWF reanalysis for the global climate and weather for the past 8 decades.")
-    tags: Optional[str] = Field(None, description="Tags or categories for the dataset", example="Reanalysis, Copernicus C3S, Global, Past, Atmosphere (surface)")
+    tags: Optional[list[str] | str] = Field(None, description="Tags or categories for the dataset", example=["Reanalysis", "Copernicus C3S", "Global", "Past", "Atmosphere (surface)"])
     created_at: Optional[datetime] = Field(None, description="Timestamp when the dataset was added", example="2024-06-17T12:34:56.789Z")
     updated_at: Optional[datetime] = Field(None, description="Timestamp when the dataset was last updated", example="2024-06-17T12:34:56.789Z")
 
@@ -27,3 +30,22 @@ class DatasetResult(BaseModel):
     def model_dump_tsv(self, index: bool = False, header: bool = False) -> str:
         """Convert the model to TSV format string."""
         return self.model_dump_csv(index=index, sep="\t", header=header)
+
+    def as_dict(self, digits: int = 3) -> dict:
+        """Convert the model to a dictionary.
+        The description and title are escaped to avoid JSON parsing issues.
+        """
+        # TODO: for now don't include the description and title, they need to be escaped to avoid JSON parsing issues
+        record = self.model_dump(serialize_as_any=True, mode="json", include={"score", "id", "rel_link", "abs_link", "tags", "created_at", "updated_at"})
+        record["score"] = round(record["score"], digits)
+        
+        if isinstance(record["tags"], str):
+            record["tags"] = [
+                tag.strip().lstrip("[").rstrip("]").replace("'", "") 
+                for tag in record["tags"].split(",")
+                ]
+        return record
+
+    def model_dump_json(self, indent: int = 2) -> str:
+        """Convert the model to JSON format string."""
+        return json.dumps(self.as_dict(), indent=indent)

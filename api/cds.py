@@ -87,6 +87,7 @@ def download(
 
     rich.print(f"[bold blue] 📥 Downloading data to {temp_dir}[/bold blue]")
     progress, task = show_progress_bar(len(periods))
+    # TODO: add concurrent downloads
     with progress:
         client = cdsapi.Client(info_callback=define_progress_info_callback(progress, task), progress=False)
         for period in periods:
@@ -95,7 +96,6 @@ def download(
             client.retrieve(dataset, request).download(temp_dir / f"{dataset}-{min(period)}-{max(period)}.zip")
             progress.update(task, advance=1)
     rich.print(f"[bold green] ✅ Data downloaded to {temp_dir}[/bold green]")
-    rich.print(f"[bold blue] 📂 Merging data to {data_dir}[/bold blue]")
 
 @app.command(
     name="extract",

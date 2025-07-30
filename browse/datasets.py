@@ -1,4 +1,5 @@
 import typer
+import json
 from rich.console import Console
 from rich.table import Table
 from rich import box
@@ -61,7 +62,8 @@ def search(
             table.add_row(str(round(row.score, 2)), row.id, row.title, row.description[:limit_description] + "..." if row.description else "")
         console.print(table)
     elif format == OutputFormat.json:
-        console.print('[\n' + ',\n'.join(['\t' + row.model_dump_json() for row in results]) + '\n]')
+        json_results = [r.as_dict() for r in results]
+        console.print(json.dumps(json_results, indent=2))
     elif format == OutputFormat.csv:
         console.print("Not yet supported")
         typer.Exit(1)
