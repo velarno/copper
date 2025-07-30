@@ -30,3 +30,4 @@ dev = [
 
 [project.scripts]
 cdsfetch="main:cli"
+copper="main:cli"
