@@ -101,28 +101,33 @@ def init(
     timeout_scroll: Optional[int] = typer.Option(500, "--timeout-scroll", '-S', help="Timeout (in ms) for the browser to scroll the page"),
     window_scroll_step: Optional[int] = typer.Option(700, "--window-scroll-step", '-W', help="Window scroll step (in px) to browse the infinite scroll page"),
     db_path: Optional[str] = typer.Option("datasets.db", "--db-path", '-D', help="Path to the local database"),
+    from_file: Optional[str] = typer.Option(None, "--from-file", '-F', help="Path to the file to seed the database from"),
 ):
     """Scrape all Copernicus CDS datasets and show progress."""
-    ensure_playwright_installed()
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Starting scraping...", total=None)
-        datasets = asyncio.run(scrape_datasets(progress, task, initial_timeout, timeout_scroll, window_scroll_step))
-        progress.update(task, description=f"Done! {len(datasets)} datasets scraped.")
-        progress.stop()
+    if from_file:
+        con = initialize_database(db_path)
+        seed_dataset_from_file(con, from_file)
+    else:
+        ensure_playwright_installed()
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Starting scraping...", total=None)
+            datasets = asyncio.run(scrape_datasets(progress, task, initial_timeout, timeout_scroll, window_scroll_step))
+            progress.update(task, description=f"Done! {len(datasets)} datasets scraped.")
+            progress.stop()
 
-    datasets_file = write_datasets_to_temp(datasets)
-    console.print(f"[green]Found {len(datasets)} datasets[/green] -> {datasets_file}")
-    task = progress.add_task("Seeding local database...", total=None)
-    con = initialize_database(db_path)
-    seed_dataset_from_file(con, datasets_file)
-    progress.update(task, description=f"Done! {len(datasets)} datasets seeded to {db_path}.")
-    progress.stop()
+        datasets_file = write_datasets_to_temp(datasets)
+        console.print(f"[green]Found {len(datasets)} datasets[/green] -> {datasets_file}")
+        task = progress.add_task("Seeding local database...", total=None)
+        con = initialize_database(db_path)
+        seed_dataset_from_file(con, datasets_file)
+        progress.update(task, description=f"Done! {len(datasets)} datasets seeded to {db_path}.")
+        progress.stop()
 
 if __name__ == "__main__":
     app()
