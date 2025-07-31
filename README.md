@@ -34,6 +34,7 @@ If you already know which dataset you need, great ! Else, you can do
 cdsfetch datasets init
 ```
 This will install playwright, and browse the CDS datasets page to get a list of existing datasets.
+If you have access to a pre-existing `datasets.json` file, you can just use the `--from-file` flag to avoid the playwright scraping step 😉
 
 To search datasets, use keywords, e.g.
 ```
@@ -58,6 +59,7 @@ This returns a table:
 │       │                                                    │ reanalysis and high   │                        │
 │       │                                                    │ resolution CMIP6      │                        │
 │       │                                                    │ climate projections   │                        │
+# More rows ...
 ```
 If you need a more compact representation, you can also use `--format`, e.g.
 ```bash
