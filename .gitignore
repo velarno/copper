@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 datasets.db
+datasets.db.bak
+datasets.db-shm
+datasets.db-wal
 .pdm-build/
 data/
 *.zip
