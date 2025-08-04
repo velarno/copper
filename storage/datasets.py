@@ -14,9 +14,12 @@ def connect_to_database(db_path: str = 'datasets.db'):
     con.load_extension('httpfs')
     return con
 
-def result_as_dict(result: tuple, fields: List[str] = RESULT_FIELDS) -> Dict[str, Any]:
+def result_as_dict(result: tuple, fields: List[str] = RESULT_FIELDS, without_score: bool = False) -> Dict[str, Any]:
     """Convert a tuple to a dictionary with the specified fields."""
-    return {field: result[i] for i, field in enumerate(fields)}
+    if without_score:
+        return {field: result[i] for i, field in enumerate(fields[1:])}
+    else:
+        return {field: result[i] for i, field in enumerate(fields)}
 
 def initialize_database(db_path: str = 'datasets.db'):
     """Initialize DuckDB with required extensions and create datasets table."""
@@ -109,7 +112,7 @@ def list_datasets(con, only_ids=False) -> List[DatasetResult]:
         FROM datasets
         ORDER BY id
     """).fetchall()
-    return [DatasetResult(**result_as_dict(row)) for row in results]
+    return [DatasetResult(**result_as_dict(row, without_score=True)) for row in results]
 
 def fetch_dataset_by_id(con, id: str) -> Optional[DatasetResult]:
     """Fetch a dataset by its ID."""

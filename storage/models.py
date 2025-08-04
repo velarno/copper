@@ -31,14 +31,17 @@ class DatasetResult(BaseModel):
         """Convert the model to TSV format string."""
         return self.model_dump_csv(index=index, sep="\t", header=header)
 
-    def as_dict(self, digits: int = 3) -> dict:
+    def as_dict(self, digits: int = 3, without_score: bool = False) -> dict:
         """Convert the model to a dictionary.
         The description and title are escaped to avoid JSON parsing issues.
         """
         # TODO: for now don't include the description and title, they need to be escaped to avoid JSON parsing issues
         record = self.model_dump(serialize_as_any=True, mode="json", include={"score", "id", "rel_link", "abs_link", "tags", "created_at", "updated_at"})
-        record["score"] = round(record["score"], digits)
-        
+        if not without_score:
+            record["score"] = round(record["score"], digits) if record["score"] is not None else None
+        else:
+            record.pop("score")
+            
         if isinstance(record["tags"], str):
             record["tags"] = [
                 tag.strip().lstrip("[").rstrip("]").replace("'", "") 

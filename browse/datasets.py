@@ -27,19 +27,28 @@ console = Console()
 
 @app.command()
 def list(
-    db_path: str = typer.Option("datasets.db", "--db-path", help="Path to DuckDB database")
+    db_path: str = typer.Option("datasets.db", "--db-path", help="Path to DuckDB database"),
+    format: OutputFormat = typer.Option(OutputFormat.table, "--format", "-f", help="Output format"),
 ):
     """List all available Copernicus datasets from the DuckDB database."""
     con = connect_to_database(db_path)
     datasets = list_datasets(con)
-    table = Table(title="Copernicus Datasets", box=box.SIMPLE, show_lines=True)
-    table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Title", style="bold yellow")
-    table.add_column("Description", style="white")
-    for d in datasets:
-        # d: (id, rel_link, abs_link, title, description, tags, created_at, updated_at)
-        table.add_row(d[0], d[3] or "", d[4] or "")
-    console.print(table)
+    if format == OutputFormat.table:
+        data = Table(title="Copernicus Datasets", box=box.SIMPLE, show_lines=True)
+        data.add_column("ID", style="cyan", no_wrap=True)
+        data.add_column("Title", style="bold yellow")
+        data.add_column("Description", style="white")
+        for d in datasets:
+            data.add_row(d.id, d.title or "", d.description or "")
+    elif format == OutputFormat.json:
+        data = json.dumps([d.as_dict(without_score=True) for d in datasets], indent=2)
+    elif format == OutputFormat.csv:
+        data = "\n".join([",".join(d.as_dict(without_score=True).values()) for d in datasets])
+    elif format == OutputFormat.tsv:
+        data = "\n".join([d.as_dict(without_score=True).values() for d in datasets])
+    else:
+        raise typer.BadParameter(f"Invalid output format: {format}")
+    console.print(data)
 
 @app.command()
 def search(
