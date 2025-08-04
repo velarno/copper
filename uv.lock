@@ -35,50 +35,6 @@ wheels = [
 ]
 
 [[package]]
-name = "cds-data-fetcher"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "cdsapi" },
-    { name = "duckdb" },
-    { name = "fastparquet" },
-    { name = "netcdf4" },
-    { name = "playwright" },
-    { name = "pydantic" },
-    { name = "rapidfuzz" },
-    { name = "rich" },
-    { name = "textual", extra = ["syntax"] },
-    { name = "typer" },
-    { name = "typing-extensions" },
-    { name = "xarray" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "ipython", version = "9.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cdsapi", specifier = ">=0.7.6" },
-    { name = "duckdb", specifier = ">=1.3.1" },
-    { name = "fastparquet", specifier = ">=2024.11.0" },
-    { name = "netcdf4", specifier = ">=1.7.2" },
-    { name = "playwright", specifier = ">=1.53.0" },
-    { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "rapidfuzz", specifier = ">=3.13.0" },
-    { name = "rich", specifier = ">=13.9.5" },
-    { name = "textual", extras = ["syntax"], specifier = ">=3.5.0" },
-    { name = "typer", specifier = ">=0.9.0" },
-    { name = "typing-extensions", specifier = ">=4.14.0" },
-    { name = "xarray", specifier = ">=2025.6.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "ipython", specifier = ">=8.37.0" }]
-
-[[package]]
 name = "cdsapi"
 version = "0.7.6"
 source = { registry = "https://pypi.org/simple" }
@@ -218,6 +174,50 @@ sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
 ]
+
+[[package]]
+name = "copper-cli"
+version = "0.1.1"
+source = { editable = "." }
+dependencies = [
+    { name = "cdsapi" },
+    { name = "duckdb" },
+    { name = "fastparquet" },
+    { name = "netcdf4" },
+    { name = "playwright" },
+    { name = "pydantic" },
+    { name = "rapidfuzz" },
+    { name = "rich" },
+    { name = "textual", extra = ["syntax"] },
+    { name = "typer" },
+    { name = "typing-extensions" },
+    { name = "xarray" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "ipython", version = "9.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cdsapi", specifier = ">=0.7.6" },
+    { name = "duckdb", specifier = ">=1.3.1" },
+    { name = "fastparquet", specifier = ">=2024.11.0" },
+    { name = "netcdf4", specifier = ">=1.7.2" },
+    { name = "playwright", specifier = ">=1.53.0" },
+    { name = "pydantic", specifier = ">=2.11.7" },
+    { name = "rapidfuzz", specifier = ">=3.13.0" },
+    { name = "rich", specifier = ">=13.9.5" },
+    { name = "textual", extras = ["syntax"], specifier = ">=3.5.0" },
+    { name = "typer", specifier = ">=0.9.0" },
+    { name = "typing-extensions", specifier = ">=4.14.0" },
+    { name = "xarray", specifier = ">=2025.6.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ipython", specifier = ">=8.37.0" }]
 
 [[package]]
 name = "cramjam"
