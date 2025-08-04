@@ -1,0 +1,6 @@
+# TODO
+
+## API related commands
+
+- [ ] Add a subcommand that uses the [STAC Api](https://cds.climate.copernicus.eu/stac-browser/collections/reanalysis-era5-single-levels?.language=en) to discover variables & constraints easily from online JSON data
+- [ ] Add a subcommand that allows "planning" the CDS download to check the provided schema against documented constraints
