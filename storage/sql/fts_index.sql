@@ -1,0 +1,1 @@
+PRAGMA create_fts_index(datasets, 'id', 'title', overwrite=1);

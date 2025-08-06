@@ -2,6 +2,7 @@ import typer
 
 from browse.commands import app as browse
 from api.commands import app as api
+from api.stac.commands import app as stac
 
 cli = typer.Typer(
     name="copper",
@@ -13,11 +14,7 @@ cli = typer.Typer(
 cli.add_typer(browse, name="browse", help="Browse Copernicus datasets (data & metadata)")
 cli.add_typer(browse, name="br", hidden=True)
 cli.add_typer(api, name="api", help="Interact with Copernicus APIs and download data")
-
-@cli.callback(invoke_without_command=True)
-def default():
-  typer.echo("Use --help to see available commands")
-  raise typer.Exit(0)
+cli.add_typer(stac, name="stac", help="Interact with Copernicus STAC API")
 
 if __name__ == "__main__":
   cli()

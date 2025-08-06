@@ -1,7 +1,10 @@
 import duckdb
+from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from storage.models import DatasetResult
+
+sql_scripts_path = Path(__file__).parent / "sql"
 
 RESULT_FIELDS = ['score', 'id', 'rel_link', 'abs_link', 'title', 'description', 'tags', 'created_at', 'updated_at']
 
@@ -13,6 +16,18 @@ def connect_to_database(db_path: str = 'datasets.db'):
     con.install_extension('httpfs')
     con.load_extension('httpfs')
     return con
+
+def execute_sql_script(con, script_path: Path):
+    """Execute a SQL script."""
+    with open(script_path, 'r') as file:
+        con.execute(file.read())
+
+def are_tables_initialized(con) -> bool:
+    """Check if the tables are initialized."""
+    tables = ["datasets", "stac_catalogue_links", "stac_collections", "stac_keywords", "stac_links"]
+    # DuckDB does not have a 'table_exists' pragma; use duckdb_tables system table instead
+    existing_tables = set(row[0] for row in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall())
+    return all(table_name in existing_tables for table_name in tables)
 
 def result_as_dict(result: tuple, fields: List[str] = RESULT_FIELDS, without_score: bool = False) -> Dict[str, Any]:
     """Convert a tuple to a dictionary with the specified fields."""
@@ -27,23 +42,13 @@ def initialize_database(db_path: str = 'datasets.db'):
     con = connect_to_database(db_path)
     
     # Create datasets table with full-text search capabilities
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS datasets (
-            id VARCHAR PRIMARY KEY,
-            rel_link VARCHAR,
-            abs_link VARCHAR,
-            title VARCHAR,
-            description TEXT,
-            tags VARCHAR,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    execute_sql_script(con, sql_scripts_path / "datasets.sql")
     
     # Create full-text search index
-    con.execute("""
-        PRAGMA create_fts_index(datasets, 'id', 'title', overwrite=1)
-    """)
+    execute_sql_script(con, sql_scripts_path / "fts_index.sql")
+
+    # Create STAC links table
+    execute_sql_script(con, sql_scripts_path / "stac.sql")
     
     return con
 
