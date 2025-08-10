@@ -3,8 +3,6 @@ from typing import Optional
 from datetime import datetime
 import pandas as pd
 import json
-import re
-import html
 
 class DatasetResult(BaseModel):
     score: Optional[float] = Field(None, description="Full-text search score (BM25)", example=12.34)

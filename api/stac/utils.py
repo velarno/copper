@@ -1,11 +1,11 @@
 
 import requests
-import json
 
 from storage.datasets import connect_to_database
+from .client import stac_client
+from display import with_progress
 
 COPERNICUS_STAC_URL = r"https://cds.climate.copernicus.eu/api/catalogue/v1/"
-
 
 def fetch_collection_links() -> list[dict]:
     url = COPERNICUS_STAC_URL
@@ -41,10 +41,11 @@ def fetch_collection_data(collection_url: str) -> tuple[dict, list[dict], list[d
     }
     return collection_info, links, keywords
 
-def fetch_all_collections() -> list[dict]:
+@with_progress
+def fetch_all_collections(silent: bool = False) -> list[dict]:
     con = connect_to_database()
     collections = con.execute("SELECT * FROM stac_catalogue_links where rel = 'child'").fetchall()
-    for collection in collections:
+    for collection in with_progress(collections, silent=silent):
         collection_info, links, keywords = fetch_collection_data(collection[3])
         store_collection_data(collection_info, links, keywords)
     return collections
@@ -69,3 +70,48 @@ def store_collection_data(collection_info: dict, links: list[dict], keywords: li
         )
     con.commit()
     con.close()
+
+# New costings-related utility functions
+def fetch_collection_variables(collection_id: str) -> list[dict]:
+    """Fetch variables for a collection using the STAC client."""
+    variables = stac_client.fetch_collection_variables(collection_id)
+    return [var.model_dump() for var in variables]
+
+def fetch_collection_constraints(collection_id: str) -> list[dict]:
+    """Fetch constraint sets for a collection using the STAC client."""
+    constraints = stac_client.fetch_collection_constraints(collection_id)
+    return [constraint.model_dump() for constraint in constraints]
+
+def get_collection_info(collection_id: str) -> dict:
+    """Get basic information about a collection."""
+    return stac_client.get_collection_info(collection_id) or {}
+
+def list_available_collections() -> list[dict]:
+    """List all available collections."""
+    return stac_client.list_collections()
+
+def search_collections(query: str) -> list[dict]:
+    """Search collections by query."""
+    return stac_client.search_collections(query)
+
+def estimate_request_cost(collection_id: str, request_data: dict) -> dict:
+    """Estimate the cost of a request."""
+    cost_estimate = stac_client.estimate_request_cost(collection_id, request_data)
+    return cost_estimate.model_dump()
+
+def validate_request(collection_id: str, request_data: dict) -> dict:
+    """Validate a request against collection constraints."""
+    validation_result = stac_client.validate_request(collection_id, request_data)
+    return validation_result.model_dump()
+
+def get_collection_variables_from_db(collection_id: str, search: str = None) -> list[dict]:
+    """Get variables for a collection from the database."""
+    from .database import get_variables
+    variables = get_variables(collection_id, search)
+    return [var.model_dump() for var in variables]
+
+def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
+    """Get constraint sets for a collection from the database."""
+    from .database import get_constraints
+    constraints = get_constraints(collection_id)
+    return [constraint.model_dump() for constraint in constraints]
