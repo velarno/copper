@@ -2,12 +2,35 @@
 Configuration management for the STAC module.
 """
 
-from typing import Optional
+from typing import List, Optional, Sequence
 from pathlib import Path
+from sqlmodel import SQLModel
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 import logging
 import os
+import json
+import enum
+from rich.table import Table
+
+class OutputFormat(enum.Enum):
+    json = "json"
+    table = "table"
+
+    @staticmethod
+    def to_json(items: List[SQLModel]) -> str:
+        return json.dumps([item.model_dump(mode="json") for item in items])
+    
+    @staticmethod
+    def to_table(items: List[SQLModel] | Sequence[SQLModel]) -> Table:
+        table: Table = Table(title=items[0].__tablename__)
+        headers: List[str] = [field for field in items[0].__fields__]
+        for header in headers:
+            table.add_column(header)
+        for item in items:
+            values = item.model_dump()
+            table.add_row(*[str(values[field]) for field in headers])
+        return table
 
 class STACConfig(BaseSettings):
     """Configuration settings for STAC module."""
@@ -35,7 +58,7 @@ class STACConfig(BaseSettings):
     )
     
     # Request Configuration
-    timeout: int = Field(default=30, ge=1, le=300, description="Request timeout in seconds")
+    timeout: int = Field(default=60, ge=1, le=300, description="Request timeout in seconds")
     max_retries: int = Field(default=3, ge=0, le=10, description="Maximum retry attempts")
     retry_delay: float = Field(default=1.0, ge=0.1, le=60.0, description="Delay between retries")
     rate_limit: int = Field(default=10, ge=1, le=100, description="Requests per minute")

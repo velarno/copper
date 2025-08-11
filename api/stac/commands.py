@@ -1,38 +1,22 @@
 import typer
-from typing import Literal, Optional, Annotated
 import logging
+from rich.console import Console
+from typing import List
 
 from api.stac.client import stac_client
-from api.stac.crud import engine, Session, list_items
-from api.stac.models import Tables
+from api.stac.crud import engine, Session, list_items, TemplateUpdater
+from api.stac.models import Tables, TableFilter
+from api.stac.config import OutputFormat
 
 logger = logging.getLogger(__name__)
+
+console = Console()
 
 app = typer.Typer(
     name="stac",
     help="STAC API commands",
     no_args_is_help=True,
 )
-
-# Template management subapp
-template_app = typer.Typer(
-    name="template",
-    help="Template management commands",
-)
-
-# @app.command(
-#     name="init",
-#     help="Initialize the STAC tables",
-# )
-# def init():
-#     con = connect_to_database()
-#     if not are_tables_initialized(con):
-#         initialize_database()
-#         typer.echo("STAC tables initialized")
-#     else:
-#         typer.echo("Tables are already initialized")
-
-
 @app.command(
     name="init",
     help="Initialize the STAC tables",
@@ -75,12 +59,22 @@ def init(
 def list(
     table: Tables = typer.Argument(..., help="Table to list"),
     limit: int = typer.Option(None, "--limit", "-l", help="Limit the number of items to list"),
-    sort: Optional[str] = typer.Option(None, "--sort", "-S", help="Sort by column"),
-    order: str = typer.Option("asc", "--order", "-o", help="Sort order"),
+    filter_string: List[str] = typer.Option(None, "--filter", "-F", help="Filter the list of items. Format: `table.field=value`"),
+    format: OutputFormat = typer.Option(OutputFormat.json, "--format", "-f", help="Output format"),
 ):
-    for item in list_items(table.table, limit):
-        # TODO: pretty print the item
-        typer.echo(item)
+    if filter_string:
+        table_filter = table.validate_filter_string(filter_string[0])
+        with Session(engine) as session:
+            items = table.apply_filter(table_filter, session)
+    else:
+        items = list_items(table.model, limit)
+    match format:
+        case OutputFormat.json:
+            console.print_json(OutputFormat.to_json(items))
+        case OutputFormat.table:
+            console.print(OutputFormat.to_table(items))
+        case _:
+            typer.echo(f"Unsupported format: {format}")
 
 # # Variable Discovery Commands
 # @app.command(

@@ -101,6 +101,8 @@ class StacClient(httpx.Client):
 
         _keywords = data.get("keywords", [])
         _links = data.get("links", [])
+        _links = [link for link in _links if link["rel"] != "self"]
+
 
         keywords = [Keyword(keyword=keyword, collection=collection) for keyword in _keywords]
         links = [CollectionLink(url=link["href"], rel=link["rel"], mime_type=link.get("type", None), collection=collection) for link in _links]
@@ -321,7 +323,7 @@ class StacClient(httpx.Client):
     #         logger.error(f"Unexpected error during validation: {e}")
     #         raise STACAPIError(f"Validation failed: {e}") from e
     
-    def fetch_catalog_links(self, session: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+    def fetch_catalog_links(self, session: Optional[Session] = None) -> List[CatalogLink]:
         """Get basic information about a collection."""
         response = self._make_request("GET", self.catalogue_url)
         data = response.json()
@@ -369,7 +371,7 @@ class StacClient(httpx.Client):
             data = response.json()
             return data.get("collections", [])
             
-        except httpx.RequestException as e:
+        except httpx.HTTPStatusError as e:
             print(f"Error fetching collections: {e}")
             return []
     
@@ -388,7 +390,7 @@ class StacClient(httpx.Client):
             data = response.json()
             return data.get("features", [])
             
-        except httpx.RequestException as e:
+        except httpx.HTTPStatusError as e:
             print(f"Error searching collections: {e}")
             return []
 

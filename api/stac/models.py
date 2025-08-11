@@ -1,9 +1,9 @@
 import os
 import enum
 from dataclasses import dataclass
-from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON
+from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON, select, Session
 import logging
-from typing import Optional, Dict, Any, List, Literal, TypedDict, Union
+from typing import Optional, Dict, Any, List, Literal, TypedDict, Union, Sequence
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,9 @@ class CollectionRelType(enum.Enum):
 class ParamType(enum.Enum):
     enum = "enum"
     array = "array"
+    number = "number"
+    string = "string"
+    boolean = "boolean"
 
 ## TYPES
 
@@ -53,6 +56,7 @@ class CatalogLink(SQLModel, table=True):
 class Collection(SQLModel, table=True):
     __tablename__ = "collection"
     id: Optional[int] = Field(default=None, primary_key=True)
+    # TODO: disambiguate this vs collection.id FK in other tables, maybe call it dataset_id ?
     collection_id: str = Field(..., description="Collection identifier")
     title: str = Field(..., description="Collection title")
     description: str = Field(..., description="Collection description")
@@ -111,6 +115,7 @@ class StacArrayType(TypedDict):
 @dataclass
 class SingleEnumVariable:
     title: str
+    name: str
     schema: StacEnumType
     choice: str = "one_or_many"
 
@@ -128,6 +133,7 @@ class SingleArrayVariable:
     A variable that can take many values, possible choices are stored as array of strings.
     """
     title: str
+    name: str
     schema: StacArrayType
     choice: str = "one_or_many"
 
@@ -150,6 +156,7 @@ class NumberArrayVariable:
     values, documented in the schema as an enum array.
     """
     title: str
+    name: str
     schema: StacArrayType
     choice: str = "one"
 
@@ -165,18 +172,17 @@ class NumberArrayVariable:
     def dimensions(self) -> List[str]:
         return [self.schema["minItems"], self.schema["maxItems"]]
 
-
 StacVariable = Union[SingleArrayVariable, SingleEnumVariable, NumberArrayVariable]
 
 
-def infer_type(json_schema: Dict[str, Any]) -> StacVariable:
+def infer_type(name: str, json_schema: Dict[str, Any]) -> StacVariable:
     if "schema" in json_schema:
         if "enum" in json_schema["schema"]:
-            return SingleEnumVariable(title=json_schema["title"], schema=json_schema["schema"])
+            return SingleEnumVariable(name=name, title=json_schema["title"], schema=json_schema["schema"])
         elif "default" in json_schema["schema"]:
-            return NumberArrayVariable(title=json_schema["title"], schema=json_schema["schema"])
+            return NumberArrayVariable(name=name, title=json_schema["title"], schema=json_schema["schema"])
         elif "items" in json_schema["schema"]:
-            return SingleArrayVariable(title=json_schema["title"], schema=json_schema["schema"])
+            return SingleArrayVariable(name=name, title=json_schema["title"], schema=json_schema["schema"])
         else:
             raise ValueError("Unsupported input data", json_schema)
     raise ValueError("Invalid input data", json_schema)
@@ -193,7 +199,7 @@ def parse_dataset_inputs(json_data: Dict[str, Any]) -> List[SingleArrayVariable 
     inputs = []
     for name, value in json_data.items():
         logger.info(f"Parsing input {name} with value {value}")
-        inputs.append(infer_type(value))
+        inputs.append(infer_type(name, value))
     return inputs
 
 class InputSchema(SQLModel, table=True):
@@ -219,6 +225,7 @@ class InputSchema(SQLModel, table=True):
             input_schema.parameters.append(
                 InputParameter(
                     title=input_var.title,
+                    name=input_var.name,
                     type=input_var.type,
                     values=input_var.values,
                     choice=input_var.choice
@@ -230,6 +237,7 @@ class InputParameter(SQLModel, table=True):
     __tablename__ = "input_parameter"
     id: Optional[int] = Field(default=None, primary_key=True)
     input_schema_id: int = Field(..., foreign_key="input_schema.id", description="Input schema identifier")
+    name: str = Field(..., description="Parameter name")
     title: str = Field(..., description="Parameter name")
     type: ParamType = Field(sa_column=Column(Enum(ParamType)), description="Parameter type")
     values: List[str] = Field(sa_column=Column(JSON), description="Parameter values")
@@ -247,6 +255,13 @@ __tables__ = [
     InputParameter,
 ]
 
+@dataclass
+class TableFilter:
+    filter_string: str
+    table_name: Optional[str] = None
+    field: Optional[str] = None
+    value: Optional[str] = None
+    is_valid: bool = False
 
 class Tables(enum.Enum):
     collections = "collection"
@@ -257,8 +272,85 @@ class Tables(enum.Enum):
     parameters = "input_parameter"
 
     @property
-    def table(self) -> SQLModel:
+    def model(self) -> SQLModel:
         return next(table for table in __tables__ if table.__tablename__ == self.value)
+
+    @property
+    def table_name(self) -> str:
+        return self.model.__tablename__
+
+    @property
+    def fields(self) -> List[str]:
+        return [field for field in self.model.__fields__]
+
+    def validate_filter_string(self, expression: str) -> TableFilter:
+        """Validate a filter string for a table. Filters are of the form `table.field=value`.
+        
+        Args:
+            expression: The filter string to validate.
+
+        Returns:
+            A TableFilter object.
+        """
+        expression = expression.strip()
+        filter = TableFilter(filter_string=expression)
+        if not expression.startswith(self.table_name):
+            return filter
+        allowed_expressions = [f"{self.table_name}.{field}" for field in self.fields]
+        matching_expression = next((expr for expr in allowed_expressions if expression.startswith(expr)), None)
+        if not matching_expression:
+            return filter
+        remainder = expression[len(matching_expression):].strip()
+        if not remainder.startswith("="):
+            return filter
+        filter.value = remainder[1:].strip()
+        filter.field = matching_expression.removeprefix(self.table_name + ".").strip()
+        filter.table_name = self.table_name
+        filter.is_valid = True
+        return filter
+
+    def apply_filter(self, filter: TableFilter, session: Session) -> Sequence[SQLModel]:
+        """Apply a filter to a table. Returns a sequence of SQLModel objects.
+        
+        Args:
+            filter: The filter to apply.
+        """
+        if not filter.is_valid:
+            return []
+        query = select(self.model)
+        if filter.field:
+            query = query.where(getattr(self.model, filter.field) == filter.value)
+        return session.exec(query).fetchall()
+
+
+class Template(SQLModel, table=True):
+    __tablename__ = "template"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    collection_id: int = Field(..., foreign_key="collection.id", description="Collection identifier")
+    name: str = Field(..., description="Template name")
+    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
+    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
+    cost: Optional[float] = Field(default=0, description="Cost of the template")
+
+    parameters: List["TemplateParameter"] = Relationship(back_populates="template")
+    history: List["TemplateHistory"] = Relationship(back_populates="template")
+
+class TemplateParameter(SQLModel, table=True):
+    __tablename__ = "template_parameter"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    template_id: int = Field(..., foreign_key="template.id", description="Template identifier")
+    name: str = Field(..., description="Parameter name")
+    value: str = Field(..., description="Parameter value")
+    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
+    template: Optional["Template"] = Relationship(back_populates="parameters")
+
+class TemplateHistory(SQLModel, table=True):
+    __tablename__ = "template_history"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    template_id: int = Field(..., foreign_key="template.id", description="Template identifier")
+    data: Dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
+    template: Optional["Template"] = Relationship(back_populates="history")
 
 # class CollectionInputSchema(BaseModel):
 #     """Model for complete collection input schemas."""

@@ -1,4 +1,5 @@
 
+import re
 import requests
 
 from storage.datasets import connect_to_database
@@ -115,3 +116,7 @@ def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
     from .database import get_constraints
     constraints = get_constraints(collection_id)
     return [constraint.model_dump() for constraint in constraints]
+
+def validate_filter_string(filter_string: str) -> bool:
+    """Validate a filter string."""
+    
