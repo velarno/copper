@@ -27,6 +27,8 @@ class CollectionRelType(enum.Enum):
     retrieve = "retrieve"
     costing_api = "costing_api"
     messages = "messages"
+    layout = "layout"
+    related = "related"
 
 class ParamType(enum.Enum):
     enum = "enum"
@@ -241,9 +243,18 @@ class InputParameter(SQLModel, table=True):
     type: ParamType = Field(sa_column=Column(Enum(ParamType)), description="Parameter type")
     values: List[str] = Field(sa_column=Column(JSON), description="Parameter values")
     choice: str = Field(..., description="Choice of the variable")
-    
+    constraints: List["InputParameterConstraint"] = Relationship(back_populates="input_parameter")
     input_schema: Optional["InputSchema"] = Relationship(back_populates="parameters")
 
+
+class InputParameterConstraint(SQLModel, table=True):
+    __tablename__ = "input_parameter_constraint"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    input_parameter_id: int = Field(..., foreign_key="input_parameter.id", description="Input parameter identifier")
+    constraint: str = Field(..., description="Constraint")
+    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
+    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
+    input_parameter: Optional["InputParameter"] = Relationship(back_populates="constraints")
 
 __tables__ = [
     Collection,
@@ -252,6 +263,7 @@ __tables__ = [
     Keyword,
     CollectionLink,
     InputParameter,
+    InputParameterConstraint,
 ]
 
 @dataclass
@@ -269,6 +281,11 @@ class Tables(enum.Enum):
     keyword = "keyword"
     collection_link = "collection_link"
     input_parameter = "input_parameter"
+    input_parameter_constraint = "input_parameter_constraint"
+    template = "template"
+    template_parameter = "template_parameter"
+    template_history = "template_history"
+    template_cost_history = "template_cost_history"
 
     @staticmethod
     def from_name(name: str) -> Optional["Tables"]:

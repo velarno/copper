@@ -1,8 +1,9 @@
 import typer
 
 from rich.console import Console
-from api.stac.crud import TemplateUpdater
-from api.stac.utils import models_to_json
+from api.stac.crud import CollectionBrowser, TemplateUpdater
+from api.stac.utils import models_to_json, models_to_table
+from api.stac.config import OutputFormat
 
 console = Console()
 
@@ -39,6 +40,21 @@ def add(
     console.print_json(template_updater.to_json())
 
 @app.command(
+    name="update",
+    help="Update a parameter in a template",
+)
+def update(
+    template_name: str = typer.Argument(..., help="Template name"),
+    parameter_name: str = typer.Argument(..., help="Parameter name"),
+    old_value: str = typer.Argument(..., help="Old parameter value"),
+    new_value: str = typer.Argument(..., help="New parameter value"),
+):
+    template_updater = TemplateUpdater(template_name)
+    template_updater.update_parameter(parameter_name, old_value, new_value)
+    template_updater.commit()
+    console.print_json(template_updater.to_json())
+
+@app.command(
     name="remove",
     help="Remove a parameter from a template",
 )
@@ -67,9 +83,18 @@ def show(
 )
 def parameters(
     template_name: str = typer.Argument(..., help="Template name"),
+    hide_values: bool = typer.Option(False, "--hide-values", "-V", help="Hide parameter values"),
+    format: OutputFormat = typer.Option(OutputFormat.json, "--format", "-f", help="Output format"),
 ):
     template_updater = TemplateUpdater(template_name)
-    console.print_json(models_to_json(template_updater.allowed_parameters()))
+    match format:
+        case OutputFormat.json:
+            console.print_json(models_to_json(template_updater.allowed_parameters(hide_values)))
+        case OutputFormat.table:
+            table = models_to_table(template_updater.allowed_parameters(hide_values))
+            console.print(table)
+        case _:
+            raise ValueError(f"Invalid format: {format}")
 
 @app.command(
     name="cost",
@@ -102,3 +127,14 @@ def history(
     template_updater = TemplateUpdater(template_name)
     history = template_updater.fetch_latest_history()
     console.print_json(models_to_json(history))
+
+@app.command(
+    name="mandatory",
+    help="Show the mandatory parameters of a template",
+)
+def mandatory(
+    template_name: str = typer.Argument(..., help="Template name"),
+):
+    template_updater = TemplateUpdater(template_name)
+    browser = CollectionBrowser(template_updater.dataset_id)
+    console.print_json(OutputFormat.to_json(browser.mandatory_parameters))

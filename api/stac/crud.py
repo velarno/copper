@@ -2,13 +2,13 @@ import os
 import json
 import logging
 import httpx
+import pandas as pd
 
 from typing import Any, Dict, List, Optional, Tuple
-
 from sqlmodel import SQLModel, create_engine, Session, select
 
 from .models import (
-    CatalogLink, Collection, CollectionLink,
+    CatalogLink, Collection, CollectionLink, CollectionRelType,
     CostEstimate, InputParameter, InputSchema,
     Keyword, Template, TemplateHistory, TemplateParameter,
     TemplateCostHistory, Tables,
@@ -92,6 +92,68 @@ def list_items(table: Tables, limit: Optional[int] = None):
     except Exception as e:
         logger.error(f"Error listing items: {e}")
         raise e
+
+
+class CollectionBrowser:
+    """
+    A class to browse a collection.
+    Allows to fetch relevant information from a collection.
+
+    - Collection parameters
+    - Constraints URL
+    - Mandatory parameters
+    - Input Schema
+    - ... (to be added)
+    # TODO: make this the main class for collection operations
+    """
+    collection: Collection
+    session: Session
+    parameters: List[InputParameter]
+    dataset_id: str
+
+    def __init__(self, dataset_id: str):
+        self.dataset_id = dataset_id
+        self.session = Session(engine)
+        self.parameters = self.fetch_parameters()
+        self.collection = collection_from_dataset_id(self.dataset_id)
+
+    def refresh(self):
+        self.parameters = self.fetch_parameters()
+
+    def fetch_parameters(self) -> List[InputParameter]:
+        with self.session as session:
+            return session.exec(
+                select(InputParameter)
+                .join(InputSchema, InputParameter.input_schema_id == InputSchema.id)
+                .join(Collection, InputSchema.collection_id == Collection.id)
+                .where(Collection.collection_id == self.dataset_id)
+                ).fetchall()
+        
+    @property
+    def constraints_url(self) -> Optional[str]:
+        links = self.session.exec(select(CollectionLink).where(CollectionLink.collection_id == self.collection.id)).fetchall()
+        for link in links:
+            if link.rel == CollectionRelType.constraints:
+                return link.url
+        return None
+
+    @property
+    def mandatory_parameters(self) -> List[str]:
+        if not self.constraints_url:
+            return []
+
+        client = httpx.Client()
+        response = client.get(self.constraints_url)
+        json_data = response.json()
+        data = pd.DataFrame(json_data)
+        return (
+            data.isna().sum()
+            .reset_index(name="count_null")
+            .rename(columns={"index": "parameter"})
+            .query("count_null == 0")
+            .parameter.tolist()
+        )
+
 
 class TemplateUpdater:
     """
@@ -208,7 +270,8 @@ class TemplateUpdater:
             if parameter.name not in serialized:
                 serialized[parameter.name] = [parameter.value]
             else:
-                serialized[parameter.name].append(parameter.value)
+                if parameter.value not in serialized[parameter.name]:
+                    serialized[parameter.name].append(parameter.value)
         return serialized
 
     def to_json(self) -> str:
@@ -235,6 +298,19 @@ class TemplateUpdater:
             session.commit()
             self.refresh(session)
 
+    def update_parameter(self, parameter_name: str, old_value: str, new_value: str):
+        with Session(engine) as session:
+            self.refresh(session)
+            to_update = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name, TemplateParameter.value == old_value)).first()
+            if to_update is None:
+                raise ValueError(f"Parameter {parameter_name} not found")
+            to_update.value = new_value
+            new_history = TemplateHistory(data=self.to_dict(), template_id=self.template.id)
+            session.add(new_history)
+            self.template_history.append(new_history)
+            session.commit()
+            self.refresh(session)
+
     def remove_parameter(self, parameter_name: str):
         with Session(engine) as session:
             self.refresh(session)
@@ -250,7 +326,7 @@ class TemplateUpdater:
         # TODO: find a way to set current state from a dict
         raise NotImplementedError("Be patient.")
 
-    def allowed_parameters(self) -> List[SQLModel]:
+    def allowed_parameters(self, hide_values: bool = False) -> List[SQLModel]:
         with Session(engine) as session:
             collection_parameters = session.exec(
                 select(InputParameter, InputSchema, Collection)
@@ -258,7 +334,12 @@ class TemplateUpdater:
                 .join(Collection, InputSchema.collection_id == Collection.id)
                 .where(Collection.id == self.collection.id)
             ).fetchall()
-
+            if hide_values:
+                params = []
+                for param, schema, collection in collection_parameters:
+                    delattr(param, "values")
+                    params.append(param)
+                return params
             return [param for param, schema, collection in collection_parameters]
     
     def _estimate_cost(self) -> CostEstimate:

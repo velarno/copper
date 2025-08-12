@@ -18,8 +18,13 @@ class OutputFormat(enum.Enum):
     table = "table"
 
     @staticmethod
-    def to_json(items: List[SQLModel]) -> str:
-        return json.dumps([item.model_dump(mode="json") for item in items])
+    def to_json(items: List[SQLModel | str]) -> str:
+        return json.dumps([
+            item.model_dump(mode="json")
+            if isinstance(item, SQLModel) 
+            else item
+            for item in items
+        ])
     
     @staticmethod
     def to_table(items: List[SQLModel]) -> Table:

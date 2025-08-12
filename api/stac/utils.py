@@ -6,6 +6,7 @@ from storage.datasets import connect_to_database
 from .client import stac_client
 from display import with_progress
 from sqlmodel import SQLModel
+from rich.table import Table
 
 COPERNICUS_STAC_URL = r"https://cds.climate.copernicus.eu/api/catalogue/v1/"
 
@@ -120,3 +121,14 @@ def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
 
 def models_to_json(models: List[SQLModel]) -> str:
     return json.dumps([model.model_dump(mode="json") for model in models])
+
+def models_to_table(models: List[SQLModel]) -> Table:
+    table = Table(title="Models")
+    # TODO: make this more generic, not hardcoded
+    fields = [field for field in models[0].model_fields if field != "values"]
+    for field in fields:
+        table.add_column(field)
+    for model in models:
+        row = model.model_dump(mode="json")
+        table.add_row(*[str(row[field]) for field in fields])
+    return table
