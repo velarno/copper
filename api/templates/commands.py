@@ -1,5 +1,9 @@
+from tempfile import gettempdir
+from pathlib import Path
 import typer
 
+from cdsapi import Client
+from typing import Optional
 from rich.console import Console
 from api.stac.crud import CollectionBrowser, TemplateUpdater
 from api.stac.utils import models_to_json, models_to_table
@@ -12,6 +16,24 @@ app = typer.Typer(
     name="template",
     help="Template management commands",
 )
+
+@app.command(
+    name="list",
+    help="List all templates",
+)
+def list(
+    format: OutputFormat = typer.Option(OutputFormat.json, "--format", "-f", help="Output format"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit the number of templates to list"),
+):
+    templates = TemplateUpdater.list(limit)
+    match format:
+        case OutputFormat.json:
+            console.print_json(models_to_json(templates))
+        case OutputFormat.table:
+            table = models_to_table(templates)
+            console.print(table)
+        case _:
+            raise ValueError(f"Invalid format: {format}")
 
 @app.command(
     name="new",
@@ -32,10 +54,17 @@ def new(
 def add(
     template_name: str = typer.Argument(..., help="Template name"),
     parameter_name: str = typer.Argument(..., help="Parameter name"),
-    parameter_value: str = typer.Argument(..., help="Parameter value"),
+    parameter_value: Optional[str] = typer.Option(None, "--value", "-v", help="Parameter value"),
+    parameter_range: Optional[str] = typer.Option(None, "--range", "-r", help="Parameter range, format: from-to"),
 ):
     template_updater = TemplateUpdater(template_name)
-    template_updater.add_parameter(parameter_name, parameter_value)
+    if parameter_range:
+        from_value, to_value = parameter_range.split("-")
+        template_updater.add_parameter_range(parameter_name, from_value, to_value)
+    elif parameter_value:
+        template_updater.add_parameter(parameter_name, parameter_value)
+    else:
+        raise typer.BadParameter("Either --value or --range must be provided")
     template_updater.commit()
     console.print_json(template_updater.to_json())
 
@@ -126,7 +155,7 @@ def history(
 ):
     template_updater = TemplateUpdater(template_name)
     history = template_updater.fetch_latest_history()
-    console.print_json(models_to_json(history))
+    console.print_json(models_to_json([history]))
 
 @app.command(
     name="mandatory",
@@ -137,4 +166,18 @@ def mandatory(
 ):
     template_updater = TemplateUpdater(template_name)
     browser = CollectionBrowser(template_updater.dataset_id)
-    console.print_json(OutputFormat.to_json(browser.mandatory_parameters))
+    console.print('\n'.join(browser.mandatory_parameters))
+
+default_output_dir = Path(gettempdir()) / "cds_download"
+
+@app.command(
+    name="download",
+    help="Download a dataset using a template",
+)
+def download(
+    template_name: str = typer.Argument(..., help="Template name"),
+    output_dir: Path = typer.Option(default_output_dir, "--output-dir", "-o", help="Output directory", dir_okay=True),
+):
+    template_updater = TemplateUpdater(template_name)
+    client = Client()
+    client.retrieve(template_updater.dataset_id, template_updater.to_dict()).download(output_dir)

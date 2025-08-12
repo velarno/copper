@@ -166,6 +166,14 @@ class TemplateUpdater:
     parameters: List[TemplateParameter]
     template_history: List[TemplateHistory]
     cost: float
+
+    @staticmethod
+    def list(limit: Optional[int] = None) -> List[Template]:
+        with Session(engine) as session:
+            query = select(Template)
+            if limit:
+                query = query.limit(limit)
+            return list(session.exec(query).fetchall())
     
     def init_from_template(self, template: Template):
         self.template = template
@@ -283,6 +291,12 @@ class TemplateUpdater:
         self.template_history = session.exec(select(TemplateHistory).where(TemplateHistory.template_id == self.template.id)).fetchall()
         self.parameters = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id)).fetchall()
     
+    def add_parameter_range(self, parameter_name: str, from_value: str, to_value: str):
+        with Session(engine) as session:
+            self.refresh(session)
+            for value in range(int(from_value), int(to_value) + 1):
+                self.add_parameter(parameter_name, str(value))
+
     def add_parameter(self, parameter_name: str, parameter_value: str):
         with Session(engine) as session:
             self.refresh(session)

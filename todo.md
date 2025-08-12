@@ -9,4 +9,7 @@
 - [ ] Add a subcommand that uses the [STAC Api](https://cds.climate.copernicus.eu/stac-browser/collections/reanalysis-era5-single-levels?.language=en) to discover variables & constraints easily from online JSON data
 - [ ] Add a subcommand that allows "planning" the CDS download to check the provided schema against documented constraints
 - [ ] Add async sessions to allow for faster fetching (aiosqlite, with httpx async)
-- [ ] Add a list of mandatory inputs for a template
+- [x] Add a list of mandatory inputs for a template
+- [ ] Make sure each cost computation is saved in the history & current template
+- [ ] Create a way to import template from JSON file
+- [ ] Create a basic template optimizer

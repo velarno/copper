@@ -2,6 +2,8 @@ import json
 import requests
 from typing import List
 
+from multimethod import multimethod
+
 from storage.datasets import connect_to_database
 from .client import stac_client
 from display import with_progress
@@ -119,9 +121,15 @@ def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
     constraints = get_constraints(collection_id)
     return [constraint.model_dump() for constraint in constraints]
 
-def models_to_json(models: List[SQLModel]) -> str:
-    return json.dumps([model.model_dump(mode="json") for model in models])
+@multimethod
+def models_to_json(models: List[SQLModel], hide_values: bool = False) -> str:
+    return json.dumps([model.model_dump(mode="json", exclude_none=hide_values) for model in models])
 
+@models_to_json.register
+def models_to_json(model: SQLModel, hide_values: bool = False) -> str:
+    return json.dumps(model.model_dump(mode="json", exclude_none=hide_values))
+
+@multimethod
 def models_to_table(models: List[SQLModel]) -> Table:
     table = Table(title="Models")
     # TODO: make this more generic, not hardcoded
@@ -131,4 +139,13 @@ def models_to_table(models: List[SQLModel]) -> Table:
     for model in models:
         row = model.model_dump(mode="json")
         table.add_row(*[str(row[field]) for field in fields])
+    return table
+
+@models_to_table.register
+def models_to_table(model: SQLModel) -> Table:
+    table = Table(title=model.__class__.__name__)
+    for field in model.model_fields:
+        table.add_column(field)
+    row = model.model_dump(mode="json")
+    table.add_row(*[str(row[field]) for field in model.model_fields])
     return table

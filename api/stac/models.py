@@ -246,7 +246,6 @@ class InputParameter(SQLModel, table=True):
     constraints: List["InputParameterConstraint"] = Relationship(back_populates="input_parameter")
     input_schema: Optional["InputSchema"] = Relationship(back_populates="parameters")
 
-
 class InputParameterConstraint(SQLModel, table=True):
     __tablename__ = "input_parameter_constraint"
     id: Optional[int] = Field(default=None, primary_key=True)

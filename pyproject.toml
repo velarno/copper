@@ -21,6 +21,7 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "sqlmodel>=0.0.24",
     "aiosqlite>=0.21.0",
+    "multimethod>=2.0",
 ]
 
 [build-system]
