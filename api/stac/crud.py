@@ -1,9 +1,21 @@
 import os
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import httpx
+
+from typing import Any, Dict, List, Optional, Tuple
+
 from sqlmodel import SQLModel, create_engine, Session, select
-from .models import CatalogLink, Collection, Template, TemplateParameter, TemplateHistory
+
+from .models import (
+    CatalogLink, Collection, CollectionLink,
+    CostEstimate, InputParameter, InputSchema,
+    Keyword, Template, TemplateHistory, TemplateParameter,
+    TemplateCostHistory, Tables,
+    TemplateHistory
+)
+from .config import config, cost_headers
+
 
 ## SQLITE ENGINE
 
@@ -57,47 +69,64 @@ def collection_from_dataset_id(dataset_id: str) -> Collection:
     """Get a collection from a dataset ID."""
     try:
         with Session(engine) as session:
-            return session.exec(select(Collection).where(Collection.collection_id == dataset_id)).first()
+            collection = session.exec(select(Collection).where(Collection.collection_id == dataset_id)).first()
+            if not collection:
+                logger.error(f"Collection with dataset ID {dataset_id} not found")
+                raise ValueError(f"Collection with dataset ID {dataset_id} not found")
+            return collection
     except Exception as e:
         logger.error(f"Error getting collection from dataset ID: {e}")
         raise e
 
-def list_items(table: SQLModel, limit: Optional[int] = None):
+def list_items(table: Tables, limit: Optional[int] = None):
     """
     List items from the database.
     """
     try:
         with Session(engine) as session:
-            query = select(table)
+            query = select(table.model)
             if limit:
                 query = query.limit(limit)
             result = session.exec(query).fetchall()
-            return result
+            return list(result)
     except Exception as e:
         logger.error(f"Error listing items: {e}")
         raise e
 
 class TemplateUpdater:
+    """
+    A class to help with template operations.
+    """
+    dataset_id: str
+    template_name: str
+    template: Template
+    collection: Collection
+    parameters: List[TemplateParameter]
+    template_history: List[TemplateHistory]
+    cost: float
+    
     def init_from_template(self, template: Template):
         self.template = template
         self.collection = collection_from_id(template.collection_id)
         self.template_name = self.template.name
         self.dataset_id = self.collection.collection_id
-        self.parameters = self.template.parameters
+        self.cost = self.template.cost
         self.template_history = self.fetch_history_from_id(self.template.id)
+
+        with Session(engine) as session:
+            session.refresh(self.template)
+            self.parameters = self.template.parameters
 
     def init_from_name(self, template_name: str) -> bool:
         """Returns `True` if existing template found, `False` if not and create needed"""
-        self.template = self.fetch_by_name(template_name)
-        
+        self.template, self.parameters, self.template_history = self.fetch_by_name(template_name)
         if not self.template:
             return False
 
         self.template_name = template_name
         self.collection = collection_from_id(self.template.collection_id)
         self.dataset_id = self.collection.collection_id
-        self.parameters = self.template.parameters
-        self.template_history = self.fetch_history_from_id(self.template.id)
+        self.cost = self.template.cost
 
         return True
 
@@ -127,7 +156,10 @@ class TemplateUpdater:
         if template is not None:
             self.init_from_template(template)
         elif template_name is not None:
-            template_exists = self.init_from_name(template_name)
+            try:
+                template_exists = self.init_from_name(template_name)
+            except ValueError:
+                template_exists = False
 
             if not template_exists:
                 if not dataset_id:
@@ -137,20 +169,31 @@ class TemplateUpdater:
 
     @classmethod
     def from_name(cls, template_name: str) -> "TemplateUpdater":
-        template = cls.fetch_by_name(template_name)
+        template: Optional[Template] = cls.fetch_by_name(template_name)
         if template is None:
             raise ValueError(f"Template {template_name} not found")
-        return cls(template.collection_id, template.name)
+        return cls(template_name, template.collection_id, template)
 
     @staticmethod
-    def fetch_by_name(template_name: str) -> Template:
+    def fetch_by_name(template_name: str) -> Tuple[Template, List[TemplateParameter], List[TemplateHistory]]:
         with Session(engine) as session:
-            return session.exec(select(Template).where(Template.name == template_name)).first()
+            template: Optional[Template] = session.exec(select(Template).where(Template.name == template_name)).first()
+            if template is None:
+                raise ValueError(f"Template {template_name} not found")
+            return template, template.parameters, template.history
     
     @staticmethod
     def fetch_history_from_id(template_id: int) -> TemplateHistory:
         with Session(engine) as session:
             return session.exec(select(TemplateHistory).where(TemplateHistory.template_id == template_id)).fetchall()
+
+    def fetch_latest_history(self) -> List[TemplateHistory]:
+        with Session(engine) as session:
+            return session.exec(
+                select(TemplateHistory)
+                .where(TemplateHistory.template_id == self.template.id)
+                .order_by(TemplateHistory.created_at)
+                ).fetchall()
 
     def commit(self):
         with Session(engine) as session:
@@ -170,20 +213,71 @@ class TemplateUpdater:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict())
+
+    def refresh(self, session: Session):
+        self.template = session.exec(select(Template).where(Template.name == self.template_name)).first()
+        self.collection = session.exec(select(Collection).where(Collection.collection_id == self.dataset_id)).first()
+        self.template_history = session.exec(select(TemplateHistory).where(TemplateHistory.template_id == self.template.id)).fetchall()
+        self.parameters = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id)).fetchall()
     
     def add_parameter(self, parameter_name: str, parameter_value: str):
-        self.parameters.append(TemplateParameter(
-            name=parameter_name,
-            value=parameter_value
-        ))
-        self.template.parameters.append(self.parameters[-1])
-        # TODO: find a good way to store the current state of the template
-        self.template_history.append(TemplateHistory(data=self.to_dict()))
-        self.commit()
+        with Session(engine) as session:
+            self.refresh(session)
+            new_parameter = TemplateParameter(
+                name=parameter_name,
+                value=parameter_value
+            )
+            self.template.parameters.append(new_parameter)
+            self.parameters.append(new_parameter)
+            new_history = TemplateHistory(data=self.to_dict(), template_id=self.template.id)
+            session.add(new_history)
+            self.template_history.append(new_history)
+            session.commit()
+            self.refresh(session)
+
+    def remove_parameter(self, parameter_name: str):
+        with Session(engine) as session:
+            self.refresh(session)
+            parameter = next((param for param in self.parameters if param.name == parameter_name), None)
+            if parameter is None:
+                raise ValueError(f"Parameter {parameter_name} not found")
+            session.delete(parameter)
+            session.commit()
+            self.refresh(session)
+            self.commit()
 
     def from_dict(self, data: Dict[str, Any]):
         # TODO: find a way to set current state from a dict
         raise NotImplementedError("Be patient.")
+
+    def allowed_parameters(self) -> List[SQLModel]:
+        with Session(engine) as session:
+            collection_parameters = session.exec(
+                select(InputParameter, InputSchema, Collection)
+                .join(InputSchema, InputParameter.input_schema_id == InputSchema.id)
+                .join(Collection, InputSchema.collection_id == Collection.id)
+                .where(Collection.id == self.collection.id)
+            ).fetchall()
+
+            return [param for param, schema, collection in collection_parameters]
+    
+    def _estimate_cost(self) -> CostEstimate:
+        client = httpx.Client()
+        endpoint = config.cost_endpoint.format(dataset_id=self.dataset_id)
+        response = client.post(endpoint, json={"inputs": self.to_dict()}, headers=cost_headers(self.dataset_id))
+        data = response.json()
+
+        return CostEstimate.from_response(data)
+
+    def delete(self):
+        with Session(engine) as session:
+            session.delete(self.template)
+            session.commit()
+            self.refresh(session)
+            self.commit()
+    
+
+        
 
 
 drop_existing = os.getenv("DROP_EXISTING", "false").lower() == "true"

@@ -2,15 +2,14 @@ import os
 import enum
 from dataclasses import dataclass
 from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON, select, Session
+from sqlmodel.sql.expression import SelectOfScalar, Select
 import logging
-from typing import Optional, Dict, Any, List, Literal, TypedDict, Union, Sequence
+from typing import Optional, Dict, Any, List, Literal, TypedDict, Union
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 retrieve_url_pattern = r'https://cds.climate.copernicus.eu/api/retrieve/v1/processes/{dataset_id}'
-
-        
 
 class CatalogRelType(enum.Enum):
     child = "child"
@@ -264,16 +263,58 @@ class TableFilter:
     is_valid: bool = False
 
 class Tables(enum.Enum):
-    collections = "collection"
-    catalog_links = "catalog_link"
-    input_schemas = "input_schema"
-    keywords = "keyword"
-    collection_links = "collection_link"
-    parameters = "input_parameter"
+    collection = "collection"
+    catalog_link = "catalog_link"
+    input_schema = "input_schema"
+    keyword = "keyword"
+    collection_link = "collection_link"
+    input_parameter = "input_parameter"
+
+    @staticmethod
+    def from_name(name: str) -> Optional["Tables"]:
+        return next((table for table in Tables if table.value == name), None)
 
     @property
     def model(self) -> SQLModel:
         return next(table for table in __tables__ if table.__tablename__ == self.value)
+
+    @property
+    def relationship_names(self) -> List[str]:
+        return [str(rel) for rel in self.model.__sqlmodel_relationships__]
+
+    @property
+    def immediate_parent(self) -> Optional["Tables"]:
+        parent_names = self.relationship_names
+        if not parent_names:
+            return None
+        parent = Tables.from_name(parent_names[0])
+        if not parent:
+            return None
+        return parent
+    
+    @property
+    def parent_foreign_key(self) -> Optional[str]:
+        parent: Optional[Tables] = self.immediate_parent
+        if not parent:
+            return None
+        candidate_column = f"{parent.table_name}_id"
+        if candidate_column in self.fields:
+            return candidate_column
+        return None
+
+    @property
+    def parent_identifier(self) -> Optional[int]:
+        parent: Optional[Tables] = self.immediate_parent
+        if not parent:
+            return None
+        return getattr(self.model, self.parent_foreign_key)
+
+    @property
+    def parent_join(self) -> Optional[SelectOfScalar]:
+        parent: Optional[Tables] = self.immediate_parent
+        if not parent:
+            return None
+        return select(self.model, parent.model).join(parent.model, self.parent_identifier == parent.model.id)
 
     @property
     def table_name(self) -> str:
@@ -309,7 +350,7 @@ class Tables(enum.Enum):
         filter.is_valid = True
         return filter
 
-    def apply_filter(self, filter: TableFilter, session: Session) -> Sequence[SQLModel]:
+    def apply_filter(self, filter: TableFilter, session: Session) -> List[SQLModel]:
         """Apply a filter to a table. Returns a sequence of SQLModel objects.
         
         Args:
@@ -320,7 +361,7 @@ class Tables(enum.Enum):
         query = select(self.model)
         if filter.field:
             query = query.where(getattr(self.model, filter.field) == filter.value)
-        return session.exec(query).fetchall()
+        return list(session.exec(query).fetchall())
 
 
 class Template(SQLModel, table=True):
@@ -338,7 +379,7 @@ class Template(SQLModel, table=True):
 class TemplateParameter(SQLModel, table=True):
     __tablename__ = "template_parameter"
     id: Optional[int] = Field(default=None, primary_key=True)
-    template_id: int = Field(..., foreign_key="template.id", description="Template identifier")
+    template_id: int = Field(..., foreign_key="template.id", description="Template identifier", ondelete="CASCADE")
     name: str = Field(..., description="Parameter name")
     value: str = Field(..., description="Parameter value")
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
@@ -347,151 +388,34 @@ class TemplateParameter(SQLModel, table=True):
 class TemplateHistory(SQLModel, table=True):
     __tablename__ = "template_history"
     id: Optional[int] = Field(default=None, primary_key=True)
-    template_id: int = Field(..., foreign_key="template.id", description="Template identifier")
+    template_id: int = Field(..., foreign_key="template.id", description="Template identifier", ondelete="CASCADE")
     data: Dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
     template: Optional["Template"] = Relationship(back_populates="history")
+    cost_history: Optional["TemplateCostHistory"] = Relationship(back_populates="history")
 
-# class CollectionInputSchema(BaseModel):
-#     """Model for complete collection input schemas."""
-#     id: Optional[int] = None
-#     collection_id: str = Field(..., description="Collection identifier")
-#     schema_data: Dict[str, Any] = Field(default_factory=dict, description="Raw schema data")
-#     input_parameters: List[SingleArrayVariable | SingleEnumVariable] = Field(default_factory=list, description="Parsed input parameters")
-#     discovered_at: Optional[datetime] = Field(None, description="Discovery timestamp")
-#     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+class TemplateCostHistory(SQLModel, table=True):
+    __tablename__ = "template_cost_history"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    history_id: int = Field(..., foreign_key="template_history.id", description="History identifier", ondelete="CASCADE")
+    cost: float = Field(..., description="Cost of the template")
+    limit: float = Field(..., description="Limit of the template")
+    request_is_valid: bool = Field(..., description="Whether the request is valid")
+    invalid_reason: Optional[str] = Field(None, description="Reason the request is invalid")
+    history: Optional["TemplateHistory"] = Relationship(back_populates="cost_history")
 
+@dataclass
+class CostEstimate:
+    cost: float
+    limit: float
+    request_is_valid: bool
+    invalid_reason: Optional[str] = None
 
-# class ConstraintSet(BaseModel):
-#     """Model for STAC constraint sets."""
-#     id: Optional[int] = None
-#     collection_id: str = Field(..., description="Collection identifier")
-#     constraint_set_id: str = Field(..., description="Constraint set identifier")
-#     variables: List[str] = Field(default_factory=list, description="Available variables")
-#     daily_statistics: List[str] = Field(default_factory=list, description="Daily statistics")
-#     frequencies: List[str] = Field(default_factory=list, description="Available frequencies")
-#     time_zones: List[str] = Field(default_factory=list, description="Available time zones")
-#     years: List[str] = Field(default_factory=list, description="Available years")
-#     months: List[str] = Field(default_factory=list, description="Available months")
-#     days: List[str] = Field(default_factory=list, description="Available days")
-#     product_types: List[str] = Field(default_factory=list, description="Available product types")
-#     discovered_at: Optional[datetime] = Field(None, description="Discovery timestamp")
-
-
-# class Template(BaseModel):
-#     """Model for STAC request templates."""
-#     id: Optional[int] = None
-#     name: str = Field(..., min_length=1, max_length=255, description="Template name")
-#     collection_id: str = Field(..., min_length=1, max_length=255, description="Collection identifier")
-#     template_data: Dict[str, Any] = Field(default_factory=dict, description="Template request data")
-#     variables: List[str] = Field(default_factory=list, min_items=0, max_items=50, description="Template variables")
-#     estimated_cost: Optional[float] = Field(None, ge=0, description="Estimated cost (must be non-negative)")
-#     budget_limit: float = Field(400.0, gt=0, description="Budget limit (must be positive)")
-#     is_within_budget: Optional[bool] = Field(None, description="Whether within budget")
-#     is_valid: Optional[bool] = Field(None, description="Whether template is valid")
-#     validation_errors: List[str] = Field(default_factory=list, max_items=100, description="Validation errors")
-#     constraint_set_id: Optional[str] = Field(None, max_length=255, description="Constraint set identifier")
-#     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
-#     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
-    
-#     @field_validator('name')
-#     def validate_name(cls, v):
-#         if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-#             raise ValueError('Template name can only contain alphanumeric characters, underscores, and hyphens')
-#         return v
-    
-#     @field_validator('collection_id')
-#     def validate_collection_id(cls, v):
-#         if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-#             raise ValueError('Collection ID can only contain alphanumeric characters, underscores, and hyphens')
-#         return v
-    
-#     @field_validator('variables')
-#     def validate_variables(cls, v):
-#         if v:
-#             for var in v:
-#                 if not isinstance(var, str) or not var.strip():
-#                     raise ValueError('All variables must be non-empty strings')
-#         return v
-    
-#     @field_validator('created_at', 'updated_at', mode='before')
-#     def ensure_timezone_aware(cls, v):
-#         if v and isinstance(v, datetime) and v.tzinfo is None:
-#             return v.replace(tzinfo=timezone.utc)
-#         return v
-    
-#     @model_validator(mode='after')
-#     def validate_budget_relationship(self):
-#         estimated_cost = self.estimated_cost
-#         budget_limit = self.budget_limit
-#         is_within_budget = self.is_within_budget
-        
-#         if estimated_cost is not None and budget_limit is not None:
-#             if is_within_budget is None:
-#                 self.is_within_budget = estimated_cost <= budget_limit
-#             elif is_within_budget != (estimated_cost <= budget_limit):
-#                 raise ValueError('is_within_budget value inconsistent with estimated_cost and budget_limit')
-        
-#         return self
-
-
-# class TemplateHistory(BaseModel):
-#     """Model for template history tracking."""
-#     id: Optional[int] = None
-#     template_id: int = Field(..., description="Template identifier")
-#     action: str = Field(..., description="Action performed", pattern="^(create|update|validate|estimate)$")
-#     old_data: Optional[Dict[str, Any]] = Field(None, description="Previous template data")
-#     new_data: Optional[Dict[str, Any]] = Field(None, description="New template data")
-#     cost_estimate: Optional[float] = Field(None, description="Cost estimate")
-#     validation_result: Optional[Dict[str, Any]] = Field(None, description="Validation result")
-#     performed_at: Optional[datetime] = Field(None, description="Action timestamp")
-
-
-# class CostEstimate(BaseModel):
-#     """Model for cost estimation results."""
-#     template_name: str = Field(..., min_length=1, description="Template name")
-#     estimated_cost: float = Field(..., ge=0, description="Estimated cost (must be non-negative)")
-#     budget_limit: float = Field(..., gt=0, description="Budget limit (must be positive)")
-#     is_within_budget: bool = Field(..., description="Whether within budget")
-#     breakdown: Dict[str, Any] = Field(default_factory=dict, description="Cost breakdown")
-#     warnings: List[str] = Field(default_factory=list, max_items=50, description="Cost warnings")
-#     estimated_at: datetime = Field(
-#         default_factory=lambda: datetime.now(timezone.utc), 
-#         description="Estimation timestamp"
-#     )
-    
-#     @model_validator(mode='after')
-#     def validate_cost_relationship(self):
-#         estimated_cost = self.estimated_cost
-#         budget_limit = self.budget_limit
-#         is_within_budget = self.is_within_budget
-        
-#         if estimated_cost is not None and budget_limit is not None:
-#             expected_within_budget = estimated_cost <= budget_limit
-#             if is_within_budget != expected_within_budget:
-#                 raise ValueError('is_within_budget value inconsistent with estimated_cost and budget_limit')
-        
-#         return self
-
-
-# class ValidationResult(BaseModel):
-#     """Model for request validation results."""
-#     template_name: str = Field(..., description="Template name")
-#     is_valid: bool = Field(..., description="Whether request is valid")
-#     errors: List[str] = Field(default_factory=list, description="Validation errors")
-#     warnings: List[str] = Field(default_factory=list, description="Validation warnings")
-#     constraint_violations: List[str] = Field(default_factory=list, description="Constraint violations")
-#     suggestions: List[str] = Field(default_factory=list, description="Improvement suggestions")
-#     validated_at: datetime = Field(default_factory=datetime.now, description="Validation timestamp")
-
-
-# class OptimizationResult(BaseModel):
-#     """Model for request optimization results."""
-#     template_name: str = Field(..., description="Template name")
-#     original_cost: float = Field(..., description="Original cost")
-#     optimized_cost: float = Field(..., description="Optimized cost")
-#     savings: float = Field(..., description="Cost savings")
-#     optimization_strategy: str = Field(..., description="Strategy used")
-#     changes: Dict[str, Any] = Field(default_factory=dict, description="Changes made")
-#     is_within_budget: bool = Field(..., description="Whether within budget")
-#     optimized_at: datetime = Field(default_factory=datetime.now, description="Optimization timestamp")
+    @classmethod
+    def from_response(cls, response: Dict[str, Any]) -> "CostEstimate":
+        return cls(
+            cost=response["cost"],
+            limit=response["limit"],
+            request_is_valid=response["request_is_valid"],
+            invalid_reason=response["invalid_reason"]
+        )

@@ -5,7 +5,7 @@ from typing import List
 
 from api.stac.client import stac_client
 from api.stac.crud import engine, Session, list_items, TemplateUpdater
-from api.stac.models import Tables, TableFilter
+from api.stac.models import Tables
 from api.stac.config import OutputFormat
 
 logger = logging.getLogger(__name__)
@@ -67,14 +67,14 @@ def list(
         with Session(engine) as session:
             items = table.apply_filter(table_filter, session)
     else:
-        items = list_items(table.model, limit)
+        items = list_items(table, limit)
     match format:
         case OutputFormat.json:
             console.print_json(OutputFormat.to_json(items))
         case OutputFormat.table:
             console.print(OutputFormat.to_table(items))
         case _:
-            typer.echo(f"Unsupported format: {format}")
+            raise typer.Exit(1)
 
 # # Variable Discovery Commands
 # @app.command(

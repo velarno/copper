@@ -2,7 +2,7 @@
 Configuration management for the STAC module.
 """
 
-from typing import List, Optional, Sequence
+from typing import Optional, List
 from pathlib import Path
 from sqlmodel import SQLModel
 from pydantic import Field, field_validator
@@ -22,7 +22,7 @@ class OutputFormat(enum.Enum):
         return json.dumps([item.model_dump(mode="json") for item in items])
     
     @staticmethod
-    def to_table(items: List[SQLModel] | Sequence[SQLModel]) -> Table:
+    def to_table(items: List[SQLModel]) -> Table:
         table: Table = Table(title=items[0].__tablename__)
         headers: List[str] = [field for field in items[0].__fields__]
         for header in headers:
@@ -55,6 +55,10 @@ class STACConfig(BaseSettings):
     retrieve_route: str = Field(
         default=r"/retrieve/v1/processes/{dataset_id}",
         description="Retrieve endpoint"
+    )
+    cost_route: str = Field(
+        default=r"/retrieve/v1/processes/{dataset_id}/costing",
+        description="Cost estimate endpoint"
     )
     
     # Request Configuration
@@ -103,6 +107,10 @@ class STACConfig(BaseSettings):
         default=[".json", ".yaml", ".yml"],
         description="Allowed file extensions"
     )
+
+    @property
+    def cost_endpoint(self) -> str:
+        return f"{self.base_url}{self.cost_route}?request_origin=ui"
     
     @field_validator('catalogue_url')
     def set_catalogue_url(cls, v, info):
@@ -117,11 +125,29 @@ class STACConfig(BaseSettings):
         if v.upper() not in valid_levels:
             raise ValueError(f"log_level must be one of {valid_levels}")
         return v.upper()
-    
 
 # Global configuration instance
 config = STACConfig()
 
+
+def cost_headers(dataset_id: str) -> dict[str, str]:
+    """
+    Costing headers for the Copernicus API.
+    """
+    return {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:141.0) Gecko/20100101 Firefox/141.0",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Content-Type": "application/json; charset=utf-8",
+        "Origin": "https://cds.climate.copernicus.eu",
+        "Sec-GPC": "1",
+        "Connection": "keep-alive",
+        "Referer": f"https://cds.climate.copernicus.eu/datasets/{dataset_id}?tab=download",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+    }
 
 def setup_logging():
     """Set up logging configuration."""

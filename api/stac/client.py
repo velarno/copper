@@ -128,117 +128,25 @@ class StacClient(httpx.Client):
 
         return input_schema
     
-    # def fetch_collection_input_parameters(self, collection_id: str) -> List[Variable]:
-    #     """Fetch input parameters for a specific collection."""
-    #     if not collection_id or not isinstance(collection_id, str):
-    #         raise STACValidationError("collection_id must be a non-empty string")
+    def estimate_request_cost(self, collection_id: str, request_data: Dict[str, Any]):
+        """Estimate the cost of a request."""
+        url = config.cost_endpoint.format(dataset_id=collection_id)
         
-    #     url = f"{self.catalogue_url}/collections/{collection_id}"
-        
-    #     try:
-    #         logger.info(f"Fetching input parameters for collection: {collection_id}")
-    #         response = self._make_request("GET", url)
-    #         data = response.json()
+        try:
+            payload = {
+                "collection_id": collection_id,
+                "request": request_data
+            }
             
-    #         input_parameters = []
-
-    #         input_info = data["inputs"]
-
-    #         for input_name, input_info in input_info.items():
-    #             if input_name is "variable":
-    #                 schema = input_info["variable"]["schema"]
-    #                 allowed_values = schema["items"]
-    #                 variable_type = schema["type"]
-
+            response = self._make_request("POST", url, json=payload)
+            response.raise_for_status()
+            data = response.json()
             
+            return data
             
-    #         logger.info(f"Found {len(variables)} variables for collection {collection_id}")
-    #         return variables
-            
-    #     except STACAPIError:
-    #         raise
-    #     except Exception as e:
-    #         logger.error(f"Unexpected error fetching variables for collection {collection_id}: {e}")
-    #         raise STACAPIError(f"Failed to fetch variables: {e}") from e
-    
-    # def fetch_collection_constraints(self, collection_id: str) -> List[ConstraintSet]:
-    #     """Fetch constraint sets for a specific collection."""
-    #     if not collection_id or not isinstance(collection_id, str):
-    #         raise STACValidationError("collection_id must be a non-empty string")
-        
-    #     url = f"{self.catalogue_url}/collections/{collection_id}/constraints"
-        
-    #     try:
-    #         logger.info(f"Fetching constraints for collection: {collection_id}")
-    #         response = self._make_request("GET", url)
-    #         data = response.json()
-            
-    #         constraints = []
-    #         # Extract constraint sets from the response
-    #         if "constraint_sets" in data:
-    #             for constraint_data in data["constraint_sets"]:
-    #                 try:
-    #                     constraint = ConstraintSet(
-    #                         collection_id=collection_id,
-    #                         constraint_set_id=constraint_data.get("id", ""),
-    #                         variables=constraint_data.get("variables", []),
-    #                         daily_statistics=constraint_data.get("daily_statistics", []),
-    #                         frequencies=constraint_data.get("frequencies", []),
-    #                         time_zones=constraint_data.get("time_zones", []),
-    #                         years=constraint_data.get("years", []),
-    #                         months=constraint_data.get("months", []),
-    #                         days=constraint_data.get("days", []),
-    #                         product_types=constraint_data.get("product_types", []),
-    #                         discovered_at=datetime.now()
-    #                     )
-    #                     constraints.append(constraint)
-    #                 except Exception as e:
-    #                     logger.warning(f"Failed to parse constraint data: {e}")
-    #                     continue
-            
-    #         logger.info(f"Found {len(constraints)} constraints for collection {collection_id}")
-    #         return constraints
-            
-    #     except STACAPIError:
-    #         raise
-    #     except Exception as e:
-    #         logger.error(f"Unexpected error fetching constraints for collection {collection_id}: {e}")
-    #         raise STACAPIError(f"Failed to fetch constraints: {e}") from e
-    
-    # def estimate_request_cost(self, collection_id: str, request_data: Dict[str, Any]) -> CostEstimate:
-    #     """Estimate the cost of a request."""
-    #     url = f"{self.base_url}/cost-estimate"
-        
-    #     try:
-    #         payload = {
-    #             "collection_id": collection_id,
-    #             "request": request_data
-    #         }
-            
-    #         response = self.post(url, json=payload)
-    #         response.raise_for_status()
-    #         data = response.json()
-            
-    #         return CostEstimate(
-    #             template_name=request_data.get("template_name", "unknown"),
-    #             estimated_cost=data.get("estimated_cost", 0.0),
-    #             budget_limit=request_data.get("budget_limit", 400.0),
-    #             is_within_budget=data.get("estimated_cost", 0.0) <= request_data.get("budget_limit", 400.0),
-    #             breakdown=data.get("breakdown", {}),
-    #             warnings=data.get("warnings", [])
-    #         )
-            
-    #     except httpx.RequestException as e:
-    #         print(f"Error estimating cost: {e}")
-    #         # Return a default estimate
-    #         return CostEstimate(
-    #             template_name=request_data.get("template_name", "unknown"),
-    #             estimated_cost=0.0,
-    #             budget_limit=request_data.get("budget_limit", 400.0),
-    #             is_within_budget=True,
-    #             breakdown={},
-    #             warnings=[f"Could not estimate cost: {e}"]
-    #         )
+        except httpx.HTTPStatusError as e:
+            print(f"Error estimating cost: {e}")
+            raise STACAPIError(f"Error estimating cost: {e}") from e
     
     # def validate_request(self, collection_id: str, request_data: Dict[str, Any], 
     #                     variables: Optional[List[Variable]] = None,

@@ -1,10 +1,11 @@
-
-import re
+import json
 import requests
+from typing import List
 
 from storage.datasets import connect_to_database
 from .client import stac_client
 from display import with_progress
+from sqlmodel import SQLModel
 
 COPERNICUS_STAC_URL = r"https://cds.climate.copernicus.eu/api/catalogue/v1/"
 
@@ -117,6 +118,5 @@ def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
     constraints = get_constraints(collection_id)
     return [constraint.model_dump() for constraint in constraints]
 
-def validate_filter_string(filter_string: str) -> bool:
-    """Validate a filter string."""
-    
+def models_to_json(models: List[SQLModel]) -> str:
+    return json.dumps([model.model_dump(mode="json") for model in models])
