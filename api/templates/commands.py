@@ -7,7 +7,7 @@ from typing import Optional
 from rich.console import Console
 from api.stac.crud import CollectionBrowser, TemplateUpdater
 from api.stac.utils import models_to_json, models_to_table
-from api.stac.config import OutputFormat
+from api.stac.config import OutputFormat, CostMethod
 
 console = Console()
 
@@ -17,10 +17,8 @@ app = typer.Typer(
     help="Template management commands",
 )
 
-@app.command(
-    name="list",
-    help="List all templates",
-)
+@app.command(name="ls", help="List all templates", hidden=True)
+@app.command(name="list", help="List all templates (aliases: ls)")
 def list(
     format: OutputFormat = typer.Option(OutputFormat.json, "--format", "-f", help="Output format"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit the number of templates to list"),
@@ -35,10 +33,9 @@ def list(
         case _:
             raise ValueError(f"Invalid format: {format}")
 
-@app.command(
-    name="new",
-    help="Create a new template",
-)
+@app.command(name="init", help="Initialize a new template", hidden=True)
+@app.command(name="create", help="Create a new template", hidden=True)
+@app.command(name="new", help="Create a new template (aliases: init, create)")
 def new(
     dataset_id: str = typer.Argument(..., help="Dataset ID"),
     template_name: str = typer.Argument(..., help="Template name"),
@@ -47,10 +44,8 @@ def new(
     template_updater.commit()
     console.print_json(template_updater.to_json())
 
-@app.command(
-    name="add",
-    help="Add a parameter to a template",
-)
+@app.command(name="+", hidden=True)
+@app.command(name="add", help="Add a parameter to a template (aliases: +)")
 def add(
     template_name: str = typer.Argument(..., help="Template name"),
     parameter_name: str = typer.Argument(..., help="Parameter name"),
@@ -83,10 +78,9 @@ def update(
     template_updater.commit()
     console.print_json(template_updater.to_json())
 
-@app.command(
-    name="remove",
-    help="Remove a parameter from a template",
-)
+@app.command(name="-", hidden=True)
+@app.command(name="rm", hidden=True)
+@app.command(name="remove", help="Remove a parameter from a template (aliases: rm, -)")
 def remove(
     template_name: str = typer.Argument(..., help="Template name"),
     parameter_name: str = typer.Argument(..., help="Parameter name"),
@@ -96,20 +90,17 @@ def remove(
     template_updater.commit()
     console.print_json(template_updater.to_json())
 
-@app.command(
-    name="show",
-    help="Show a template",
-)
+@app.command(name="print", help="Show a template", hidden=True)
+@app.command(name="show", help="Show a template (aliases: print)")
 def show(
     template_name: str = typer.Argument(..., help="Template name"),
 ):
     template_updater = TemplateUpdater(template_name)
     console.print_json(template_updater.to_json())
 
-@app.command(
-    name="parameters",
-    help="Show the parameters of a template",
-)
+@app.command(name="par", hidden=True)
+@app.command(name="params", hidden=True)
+@app.command(name="parameters",help="Show the parameters of a template (aliases: params, par)")
 def parameters(
     template_name: str = typer.Argument(..., help="Template name"),
     hide_values: bool = typer.Option(False, "--hide-values", "-V", help="Hide parameter values"),
@@ -131,25 +122,25 @@ def parameters(
 )
 def cost(
     template_name: str = typer.Argument(..., help="Template name"),
+    method: CostMethod = typer.Option(CostMethod.local, "--method", "-m", help="Cost method"),
 ):
     template_updater = TemplateUpdater(template_name)
-    cost = template_updater._estimate_cost()
-    console.print(cost)
+    cost = template_updater.compute_cost(method)
+    console.print_json(cost.to_json())
 
-@app.command(
-    name="delete",
-    help="Delete a template",
-)
+@app.command(name="trash", help="Remove a template", hidden=True)
+@app.command(name="purge", help="Remove a template", hidden=True)
+@app.command(name="del", help="Delete a template", hidden=True)
+@app.command(name="delete", help="Delete a template (aliases: del, purge, trash)")
 def delete(
     template_name: str = typer.Argument(..., help="Template name"),
 ):
     template_updater = TemplateUpdater(template_name)
     template_updater.delete()
 
-@app.command(
-    name="history",
-    help="Show the history of a template",
-)
+@app.command(name="log", help="Show the history of a template", hidden=True)
+@app.command(name="hist", help="Show the history of a template", hidden=True)
+@app.command(name="history", help="Show the history of a template (aliases: log, hist, history)")
 def history(
     template_name: str = typer.Argument(..., help="Template name"),
 ):
@@ -170,10 +161,11 @@ def mandatory(
 
 default_output_dir = Path(gettempdir()) / "cds_download"
 
-@app.command(
-    name="download",
-    help="Download a dataset using a template",
-)
+@app.command(name="retrieve", help="Download a dataset using a template", hidden=True)
+@app.command(name="dl", help="Download a dataset using a template", hidden=True)
+@app.command(name="get", help="Download a dataset using a template", hidden=True)
+@app.command(name="fetch", help="Download a dataset using a template", hidden=True)
+@app.command(name="download", help="Download a dataset using a template (aliases: dl, get, fetch, retrieve)")
 def download(
     template_name: str = typer.Argument(..., help="Template name"),
     output_dir: Path = typer.Option(default_output_dir, "--output-dir", "-o", help="Output directory", dir_okay=True),
@@ -181,3 +173,30 @@ def download(
     template_updater = TemplateUpdater(template_name)
     client = Client()
     client.retrieve(template_updater.dataset_id, template_updater.to_dict()).download(output_dir)
+
+
+@app.command(name="save", help="Save a template to a JSON file", hidden=True)
+@app.command(name="export", hidden=True)
+@app.command(name="dump", help="Dump a template to a JSON file (aliases: export, save)")
+def export(
+    template_name: str = typer.Argument(..., help="Template name"),
+    output_file: Path = typer.Option(..., "--output-file", "-o", help="Output file", dir_okay=False),
+    indent: int = typer.Option(4, "--indent", "-i", help="Indentation level"),
+    compact: bool = typer.Option(False, "--compact", "-C", help="Compact output"),
+):
+    template_updater = TemplateUpdater(template_name)
+    indent: Optional[int] = None if compact else indent
+    output_file.write_text(template_updater.to_json(indent=indent))
+
+
+@app.command(name="load", help="Load a template from a JSON file", hidden=True)
+@app.command(name="ingest", hidden=True)
+@app.command(name="import", help="Import a template from a JSON file (aliases: ingest, load)")
+def load(
+    template_name: Optional[str] = typer.Option(None, "--name", "-n", help="Template name"),
+    input_file: Path = typer.Option(..., "--file", "-f", help="Input file", dir_okay=False),
+):
+    template_updater = TemplateUpdater.from_json(input_file)
+    if template_name:
+        template_updater.template_name = template_name
+    console.print_json(template_updater.to_json())

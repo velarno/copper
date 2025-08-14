@@ -1,8 +1,8 @@
-import os
+import json
 import enum
 from dataclasses import dataclass
 from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON, select, Session
-from sqlmodel.sql.expression import SelectOfScalar, Select
+from sqlmodel.sql.expression import SelectOfScalar
 import logging
 from typing import Optional, Dict, Any, List, Literal, TypedDict, Union
 from datetime import datetime
@@ -435,3 +435,12 @@ class CostEstimate:
             request_is_valid=response["request_is_valid"],
             invalid_reason=response["invalid_reason"]
         )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            attr : getattr(self, attr)
+            for attr in self.__dataclass_fields__
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())

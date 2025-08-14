@@ -13,6 +13,12 @@ import json
 import enum
 from rich.table import Table
 
+class CostMethod(enum.Enum):
+    local = "local"
+    """Use a local approximation of the cost (multiplies the number of parameters)"""
+    api = "api"
+    """Use an official STAC API endpoint to fetch the cost (costing endpoint), which is more accurate but slower"""
+
 class OutputFormat(enum.Enum):
     json = "json"
     table = "table"

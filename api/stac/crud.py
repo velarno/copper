@@ -4,6 +4,8 @@ import logging
 import httpx
 import pandas as pd
 
+from math import prod
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from sqlmodel import SQLModel, create_engine, Session, select
 
@@ -14,7 +16,7 @@ from .models import (
     TemplateCostHistory, Tables,
     TemplateHistory
 )
-from .config import config, cost_headers
+from .config import config, cost_headers, CostMethod
 
 
 ## SQLITE ENGINE
@@ -213,7 +215,28 @@ class TemplateUpdater:
         self.parameters = []
         self.template_history = [TemplateHistory(data={})]
         self.commit()
+        
+    @classmethod
+    def from_json(cls, path: Optional[Path] = None, json_data: Optional[str] = None):
+        if not path and not json_data:
+            raise ValueError("Either path or json_data must be provided")
 
+        if path:
+            data = json.load(path.open())
+        else:
+            data = json.loads(json_data) if json_data else {}
+        
+        required_keys = ["metadata", "parameters"]
+        if any(key not in data for key in required_keys):
+            raise ValueError("Invalid JSON data, missing required keys")
+
+        metadata, parameters = data["metadata"], data["parameters"]
+        instance = cls(metadata['template_name'], metadata['dataset_id'])
+        instance.parameters = [TemplateParameter(name=pname, value=pval) for pname, pdata in parameters.items() for pval in pdata]
+        instance.template_history = [TemplateHistory(**history) for history in data['history']] if 'history' in data else []
+        instance.commit()
+        return instance
+        
 
     def __init__(self, template_name: str, dataset_id: Optional[str] = None, template: Optional[Template] = None) -> None:
         self.dataset_id = dataset_id
@@ -282,8 +305,28 @@ class TemplateUpdater:
                     serialized[parameter.name].append(parameter.value)
         return serialized
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
+    def to_json(self, indent: Optional[int] = None) -> str:
+        """
+        Return a JSON string with the template state and metadata.
+        The format is:
+        {
+            "dataset_id": "...",
+            "template_name": "...",
+            "parameters": [
+                {
+                    "name": "...",
+                    "value": "..."
+                },
+                ...
+            ]
+        }
+        """
+        state = self.to_dict()
+        metadata = {
+            "dataset_id": self.dataset_id,
+            "template_name": self.template_name
+        }
+        return json.dumps({"metadata": metadata, "parameters": state}, indent=indent)
 
     def refresh(self, session: Session):
         self.template = session.exec(select(Template).where(Template.name == self.template_name)).first()
@@ -355,8 +398,30 @@ class TemplateUpdater:
                     params.append(param)
                 return params
             return [param for param, schema, collection in collection_parameters]
-    
+
+    def compute_cost(self, method: CostMethod) -> CostEstimate:
+        match method:
+            case CostMethod.local:
+                return self._estimate_cost()
+            case CostMethod.api:
+                return self._fetch_cost()
+            case _:
+                raise ValueError(f"Invalid cost method: {method}")
+
     def _estimate_cost(self) -> CostEstimate:
+        data = self.to_dict()
+        n_params: Dict[str, int] = {
+            key : len(values) if isinstance(values, list) else 1
+            for key, values in data.items()
+        }
+        return CostEstimate(
+            cost=prod(n_params.values()),
+            limit=-1,
+            request_is_valid=True,
+            invalid_reason=None
+        )
+    
+    def _fetch_cost(self) -> CostEstimate:
         client = httpx.Client()
         endpoint = config.cost_endpoint.format(dataset_id=self.dataset_id)
         response = client.post(endpoint, json={"inputs": self.to_dict()}, headers=cost_headers(self.dataset_id))
@@ -368,12 +433,6 @@ class TemplateUpdater:
         with Session(engine) as session:
             session.delete(self.template)
             session.commit()
-            self.refresh(session)
-            self.commit()
-    
-
-        
-
 
 drop_existing = os.getenv("DROP_EXISTING", "false").lower() == "true"
 create_db_and_tables(drop_existing=drop_existing)
