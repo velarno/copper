@@ -94,9 +94,13 @@ def remove(
 @app.command(name="show", help="Show a template (aliases: print)")
 def show(
     template_name: str = typer.Argument(..., help="Template name"),
+    indent: Optional[int] = typer.Option(4, '--indent', '-i', help="JSON indentation"),
+    compact: bool = typer.Option(False, "--compact", "-C", help="Compact output (overrides indent)"),
+    with_metadata: bool = typer.Option(False, "--metadata", "-M", help="Include template metadata in the output"),
 ):
+    indent = None if compact else indent
     template_updater = TemplateUpdater(template_name)
-    console.print_json(template_updater.to_json())
+    console.print_json(template_updater.to_json(indent=indent, with_metadata=with_metadata))
 
 @app.command(name="par", hidden=True)
 @app.command(name="params", hidden=True)

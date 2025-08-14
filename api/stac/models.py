@@ -65,9 +65,9 @@ class Collection(SQLModel, table=True):
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
     doi: Optional[str] = Field(None, description="DOI of the collection")
 
-    keywords: List["Keyword"] = Relationship(back_populates="collection")
-    links: List["CollectionLink"] = Relationship(back_populates="collection")
-    input_schema: Optional["InputSchema"] = Relationship(back_populates="collection")
+    keywords: List["Keyword"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"})
+    links: List["CollectionLink"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"})
+    input_schema: Optional["InputSchema"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"})
 
     @classmethod
     def from_response(cls, data: Dict[str, Any]) -> "Collection":
@@ -91,7 +91,7 @@ class Keyword(SQLModel, table=True):
     keyword: str = Field(..., description="Keyword")
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
-    collection: Optional[Collection] = Relationship(back_populates="keywords")
+    collection: Optional[Collection] = Relationship(back_populates="keywords", sa_relationship_kwargs={"lazy": "selectin"})
 
 class CollectionLink(SQLModel, table=True):
     __tablename__ = "collection_link"
@@ -103,7 +103,7 @@ class CollectionLink(SQLModel, table=True):
     title: Optional[str] = Field(None, description="Title of the collection link")
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
 
-    collection: Optional[Collection] = Relationship(back_populates="links")
+    collection: Optional[Collection] = Relationship(back_populates="links", sa_relationship_kwargs={"lazy": "selectin"})
 
 class StacEnumType(TypedDict):
     type: VariableType
@@ -210,8 +210,8 @@ class InputSchema(SQLModel, table=True):
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
 
-    collection: Optional["Collection"] = Relationship(back_populates="input_schema")
-    parameters: List["InputParameter"] = Relationship(back_populates="input_schema")
+    collection: Optional["Collection"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"})
+    parameters: List["InputParameter"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"})
 
     @classmethod
     def create_with_parameters(cls, response_data: Dict[str, Any], collection: Collection):
@@ -244,7 +244,7 @@ class InputParameter(SQLModel, table=True):
     values: List[str] = Field(sa_column=Column(JSON), description="Parameter values")
     choice: str = Field(..., description="Choice of the variable")
     constraints: List["InputParameterConstraint"] = Relationship(back_populates="input_parameter")
-    input_schema: Optional["InputSchema"] = Relationship(back_populates="parameters")
+    input_schema: Optional["InputSchema"] = Relationship(back_populates="parameters", sa_relationship_kwargs={"lazy": "selectin"})
 
 class InputParameterConstraint(SQLModel, table=True):
     __tablename__ = "input_parameter_constraint"
@@ -253,7 +253,7 @@ class InputParameterConstraint(SQLModel, table=True):
     constraint: str = Field(..., description="Constraint")
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
-    input_parameter: Optional["InputParameter"] = Relationship(back_populates="constraints")
+    input_parameter: Optional["InputParameter"] = Relationship(back_populates="constraints", sa_relationship_kwargs={"lazy": "selectin"})
 
 __tables__ = [
     Collection,
@@ -389,8 +389,8 @@ class Template(SQLModel, table=True):
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
     cost: Optional[float] = Field(default=0, description="Cost of the template")
 
-    parameters: List["TemplateParameter"] = Relationship(back_populates="template")
-    history: List["TemplateHistory"] = Relationship(back_populates="template")
+    parameters: List["TemplateParameter"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"})
+    history: List["TemplateHistory"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"})
 
 class TemplateParameter(SQLModel, table=True):
     __tablename__ = "template_parameter"
@@ -399,7 +399,7 @@ class TemplateParameter(SQLModel, table=True):
     name: str = Field(..., description="Parameter name")
     value: str = Field(..., description="Parameter value")
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    template: Optional["Template"] = Relationship(back_populates="parameters")
+    template: Optional["Template"] = Relationship(back_populates="parameters", sa_relationship_kwargs={"lazy": "selectin"})
 
 class TemplateHistory(SQLModel, table=True):
     __tablename__ = "template_history"
@@ -407,8 +407,8 @@ class TemplateHistory(SQLModel, table=True):
     template_id: int = Field(..., foreign_key="template.id", description="Template identifier", ondelete="CASCADE")
     data: Dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    template: Optional["Template"] = Relationship(back_populates="history")
-    cost_history: Optional["TemplateCostHistory"] = Relationship(back_populates="history")
+    template: Optional["Template"] = Relationship(back_populates="history", sa_relationship_kwargs={"lazy": "selectin"})
+    cost_history: Optional["TemplateCostHistory"] = Relationship(back_populates="history", sa_relationship_kwargs={"lazy": "selectin"})
 
 class TemplateCostHistory(SQLModel, table=True):
     __tablename__ = "template_cost_history"
@@ -418,7 +418,7 @@ class TemplateCostHistory(SQLModel, table=True):
     limit: float = Field(..., description="Limit of the template")
     request_is_valid: bool = Field(..., description="Whether the request is valid")
     invalid_reason: Optional[str] = Field(None, description="Reason the request is invalid")
-    history: Optional["TemplateHistory"] = Relationship(back_populates="cost_history")
+    history: Optional["TemplateHistory"] = Relationship(back_populates="cost_history", sa_relationship_kwargs={"lazy": "selectin"})
 
 @dataclass
 class CostEstimate:

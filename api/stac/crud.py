@@ -168,6 +168,13 @@ class TemplateUpdater:
     parameters: List[TemplateParameter]
     template_history: List[TemplateHistory]
     cost: float
+    _session: Optional[Session]
+
+    @property
+    def session(self):
+        if not self._session:
+            self._session = Session(engine)
+        return self._session
 
     @staticmethod
     def list(limit: Optional[int] = None) -> List[Template]:
@@ -185,7 +192,7 @@ class TemplateUpdater:
         self.cost = self.template.cost
         self.template_history = self.fetch_history_from_id(self.template.id)
 
-        with Session(engine) as session:
+        with self.session as session:
             session.refresh(self.template)
             self.parameters = self.template.parameters
 
@@ -214,7 +221,7 @@ class TemplateUpdater:
         self.template_history = []
         self.parameters = []
         self.template_history = [TemplateHistory(data={})]
-        self.commit()
+        self.update_cost()
         
     @classmethod
     def from_json(cls, path: Optional[Path] = None, json_data: Optional[str] = None):
@@ -232,9 +239,13 @@ class TemplateUpdater:
 
         metadata, parameters = data["metadata"], data["parameters"]
         instance = cls(metadata['template_name'], metadata['dataset_id'])
-        instance.parameters = [TemplateParameter(name=pname, value=pval) for pname, pdata in parameters.items() for pval in pdata]
-        instance.template_history = [TemplateHistory(**history) for history in data['history']] if 'history' in data else []
-        instance.commit()
+        for pname, pdata in parameters.items():
+            if isinstance(pdata, list):
+                for pval in pdata:
+                    instance.add_parameter(pname, pval)
+            else:
+                instance.add_parameter(pname, pdata)
+        instance.update_cost()
         return instance
         
 
@@ -245,6 +256,7 @@ class TemplateUpdater:
         self.collection = None
         self.parameters: List[TemplateParameter] = []
         self.template_history: List[TemplateHistory] = []
+        self._session = Session(engine)
 
         if template is not None:
             self.init_from_template(template)
@@ -258,7 +270,9 @@ class TemplateUpdater:
                 if not dataset_id:
                     raise ValueError("Dataset ID is required to create a new template")
                 self.create_template(template_name, dataset_id)
-                return
+        
+        self.refresh(self.session)
+        self.update_cost()
 
     @classmethod
     def from_name(cls, template_name: str) -> "TemplateUpdater":
@@ -281,7 +295,7 @@ class TemplateUpdater:
             return session.exec(select(TemplateHistory).where(TemplateHistory.template_id == template_id)).fetchall()
 
     def fetch_latest_history(self) -> List[TemplateHistory]:
-        with Session(engine) as session:
+        with self.session as session:
             return session.exec(
                 select(TemplateHistory)
                 .where(TemplateHistory.template_id == self.template.id)
@@ -289,7 +303,7 @@ class TemplateUpdater:
                 ).fetchall()
 
     def commit(self):
-        with Session(engine) as session:
+        with self.session as session:
             session.add(self.template)
             session.add_all(self.template.history)
             session.commit()
@@ -305,7 +319,7 @@ class TemplateUpdater:
                     serialized[parameter.name].append(parameter.value)
         return serialized
 
-    def to_json(self, indent: Optional[int] = None) -> str:
+    def to_json(self, indent: Optional[int] = None, with_metadata: bool = True) -> str:
         """
         Return a JSON string with the template state and metadata.
         The format is:
@@ -326,7 +340,11 @@ class TemplateUpdater:
             "dataset_id": self.dataset_id,
             "template_name": self.template_name
         }
-        return json.dumps({"metadata": metadata, "parameters": state}, indent=indent)
+        result = (
+            {"metadata": metadata, "parameters": state} if with_metadata
+            else state
+        )
+        return json.dumps(result, indent=indent)
 
     def refresh(self, session: Session):
         self.template = session.exec(select(Template).where(Template.name == self.template_name)).first()
@@ -335,13 +353,16 @@ class TemplateUpdater:
         self.parameters = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id)).fetchall()
     
     def add_parameter_range(self, parameter_name: str, from_value: str, to_value: str):
-        with Session(engine) as session:
+        with self.session as session:
             self.refresh(session)
             for value in range(int(from_value), int(to_value) + 1):
                 self.add_parameter(parameter_name, str(value))
 
+            self.update_cost()
+        
+
     def add_parameter(self, parameter_name: str, parameter_value: str):
-        with Session(engine) as session:
+        with self.session as session:
             self.refresh(session)
             new_parameter = TemplateParameter(
                 name=parameter_name,
@@ -354,9 +375,10 @@ class TemplateUpdater:
             self.template_history.append(new_history)
             session.commit()
             self.refresh(session)
+            self.update_cost()
 
     def update_parameter(self, parameter_name: str, old_value: str, new_value: str):
-        with Session(engine) as session:
+        with self.session as session:
             self.refresh(session)
             to_update = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name, TemplateParameter.value == old_value)).first()
             if to_update is None:
@@ -367,9 +389,10 @@ class TemplateUpdater:
             self.template_history.append(new_history)
             session.commit()
             self.refresh(session)
+        self.update_cost()
 
     def remove_parameter(self, parameter_name: str):
-        with Session(engine) as session:
+        with self.session as session:
             self.refresh(session)
             parameter = next((param for param in self.parameters if param.name == parameter_name), None)
             if parameter is None:
@@ -377,14 +400,14 @@ class TemplateUpdater:
             session.delete(parameter)
             session.commit()
             self.refresh(session)
-            self.commit()
+        self.update_cost()
 
     def from_dict(self, data: Dict[str, Any]):
         # TODO: find a way to set current state from a dict
         raise NotImplementedError("Be patient.")
 
     def allowed_parameters(self, hide_values: bool = False) -> List[SQLModel]:
-        with Session(engine) as session:
+        with self.session as session:
             collection_parameters = session.exec(
                 select(InputParameter, InputSchema, Collection)
                 .join(InputSchema, InputParameter.input_schema_id == InputSchema.id)
@@ -402,11 +425,16 @@ class TemplateUpdater:
     def compute_cost(self, method: CostMethod) -> CostEstimate:
         match method:
             case CostMethod.local:
-                return self._estimate_cost()
+                self.cost = self._estimate_cost()
             case CostMethod.api:
-                return self._fetch_cost()
+                self.cost = self._fetch_cost()
             case _:
                 raise ValueError(f"Invalid cost method: {method}")
+        return self.cost
+
+    def update_cost(self):
+        self.compute_cost(CostMethod.local)
+        self.commit()
 
     def _estimate_cost(self) -> CostEstimate:
         data = self.to_dict()
@@ -415,7 +443,7 @@ class TemplateUpdater:
             for key, values in data.items()
         }
         return CostEstimate(
-            cost=prod(n_params.values()),
+            cost=max(1, prod(n_params.values())),
             limit=-1,
             request_is_valid=True,
             invalid_reason=None
@@ -430,7 +458,7 @@ class TemplateUpdater:
         return CostEstimate.from_response(data)
 
     def delete(self):
-        with Session(engine) as session:
+        with self.session as session:
             session.delete(self.template)
             session.commit()
 
