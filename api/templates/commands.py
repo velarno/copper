@@ -22,8 +22,13 @@ app = typer.Typer(
 def list(
     format: OutputFormat = typer.Option(OutputFormat.json, "--format", "-f", help="Output format"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit the number of templates to list"),
+    children: Optional[str] = typer.Option(None, "--children", "-c", help="List children of a template"),
 ):
-    templates = TemplateUpdater.list(limit)
+    if children:
+        template_updater = TemplateUpdater(children)
+        templates = template_updater.fetch_sub_templates()
+    else:
+        templates = TemplateUpdater.list(limit)
     match format:
         case OutputFormat.json:
             console.print_json(models_to_json(templates))

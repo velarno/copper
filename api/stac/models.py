@@ -4,12 +4,14 @@ from dataclasses import dataclass
 from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON, select, Session
 from sqlmodel.sql.expression import SelectOfScalar
 import logging
-from typing import Optional, Dict, Any, List, Literal, TypedDict, Union
+from typing import Optional, Dict, Any, List, Literal, TypedDict, Union, TypeVar
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 retrieve_url_pattern = r'https://cds.climate.copernicus.eu/api/retrieve/v1/processes/{dataset_id}'
+
+Entity = TypeVar("Entity", bound=SQLModel)
 
 class CatalogRelType(enum.Enum):
     child = "child"

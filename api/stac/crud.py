@@ -7,7 +7,7 @@ import pandas as pd
 from math import prod
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from sqlmodel import SQLModel, create_engine, Session, select
+from sqlmodel import SQLModel, create_engine, Session, select, col
 
 from .models import (
     CatalogLink, Collection, CollectionLink, CollectionRelType,
@@ -507,7 +507,17 @@ class TemplateUpdater:
             session.commit()
             session.refresh(template)
 
-        return template
+    def fetch_sub_templates(self, prefix: str = "sub") -> List[Template]:
+        sub_template_prefix = f"{prefix}_{self.template_name}_"
+        with self.session as session:
+            return list(
+                session.exec(
+                    select(Template)
+                    .where(
+                        col(Template.name).like(f"{sub_template_prefix}%")
+                    )
+                )
+            )
 
 drop_existing = os.getenv("DROP_EXISTING", "false").lower() == "true"
 create_db_and_tables(drop_existing=drop_existing)

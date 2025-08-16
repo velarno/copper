@@ -1,10 +1,9 @@
+import json
 from copy import deepcopy
 from math import prod
 from collections import deque
 from typing import Optional, List
 from api.stac.crud import TemplateUpdater, add_metadata
-from api.stac.models import Template
-import json
 
 class TemplateOptimizer:
     """
@@ -88,7 +87,7 @@ class TemplateOptimizer:
             with open(f"{prefix}-{padded_index}.json", "w") as f:
                 json.dump(template, f)
 
-    def persist_templates(self) -> None:
+    def persist_templates(self, prefix: str = "sub") -> None:
         base_name = self.template_updater.template_name
         for i, tpl_state in enumerate(self.valid):
             padded_index = str(i).zfill(3)
@@ -96,7 +95,7 @@ class TemplateOptimizer:
                 add_metadata(
                     tpl_state,
                     self.template_updater.dataset_id,
-                    f"{base_name}_{padded_index}"
+                    f"{prefix}_{base_name}_{padded_index}"
                 )
             )
 

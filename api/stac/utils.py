@@ -7,8 +7,8 @@ from multimethod import multimethod
 from storage.datasets import connect_to_database
 from .client import stac_client
 from display import with_progress
-from sqlmodel import SQLModel
 from rich.table import Table
+from .models import Entity
 
 COPERNICUS_STAC_URL = r"https://cds.climate.copernicus.eu/api/catalogue/v1/"
 
@@ -122,15 +122,15 @@ def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
     return [constraint.model_dump() for constraint in constraints]
 
 @multimethod
-def models_to_json(models: List[SQLModel], hide_values: bool = False) -> str:
+def models_to_json(models: List[Entity], hide_values: bool = False) -> str:
     return json.dumps([model.model_dump(mode="json", exclude_none=hide_values) for model in models])
 
 @models_to_json.register
-def models_to_json(model: SQLModel, hide_values: bool = False) -> str:
-    return json.dumps(model.model_dump(mode="json", exclude_none=hide_values))
+def models_to_json(models: Entity, hide_values: bool = False) -> str:
+    return json.dumps(models.model_dump(mode="json", exclude_none=hide_values))
 
 @multimethod
-def models_to_table(models: List[SQLModel]) -> Table:
+def models_to_table(models: List[Entity]) -> Table:
     table = Table(title="Models")
     # TODO: make this more generic, not hardcoded
     fields = [field for field in models[0].model_fields if field != "values"]
@@ -142,7 +142,7 @@ def models_to_table(models: List[SQLModel]) -> Table:
     return table
 
 @models_to_table.register
-def models_to_table(model: SQLModel) -> Table:
+def models_to_table(model: Entity) -> Table:
     table = Table(title=model.__class__.__name__)
     for field in model.model_fields:
         table.add_column(field)
