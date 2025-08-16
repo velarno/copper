@@ -16,3 +16,7 @@
 - [ ] Handle duplicate values better
 - [ ] Add some field on template to help distinguish between templates & sub-templates
 - [ ] Add some fields on template to indicate if it was downloaded & some machine id + time
+
+## Logic & Efficiency
+
+- [ ] Try to check if other optim approaches get bigger gains when the expected n-th split along the same dim would yield a small improvement

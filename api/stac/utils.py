@@ -1,14 +1,12 @@
 import json
 import requests
-from typing import List
-
-from multimethod import multimethod
+from typing import List, Union, Optional
 
 from storage.datasets import connect_to_database
 from .client import stac_client
 from display import with_progress
 from rich.table import Table
-from .models import Entity
+from sqlmodel import SQLModel
 
 COPERNICUS_STAC_URL = r"https://cds.climate.copernicus.eu/api/catalogue/v1/"
 
@@ -109,7 +107,7 @@ def validate_request(collection_id: str, request_data: dict) -> dict:
     validation_result = stac_client.validate_request(collection_id, request_data)
     return validation_result.model_dump()
 
-def get_collection_variables_from_db(collection_id: str, search: str = None) -> list[dict]:
+def get_collection_variables_from_db(collection_id: str, search: Optional[str] = None) -> list[dict]:
     """Get variables for a collection from the database."""
     from .database import get_variables
     variables = get_variables(collection_id, search)
@@ -121,31 +119,31 @@ def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
     constraints = get_constraints(collection_id)
     return [constraint.model_dump() for constraint in constraints]
 
-@multimethod
-def models_to_json(models: List[Entity], hide_values: bool = False) -> str:
-    return json.dumps([model.model_dump(mode="json", exclude_none=hide_values) for model in models])
+def models_to_json(models: Union[List[SQLModel], SQLModel], hide_values: bool = False) -> str:
+    """Convert SQLModel instances to JSON string. Accepts either a single model or a list of models."""
+    if isinstance(models, list):
+        return json.dumps([model.model_dump(mode="json", exclude_none=hide_values) for model in models])
+    else:
+        return json.dumps(models.model_dump(mode="json", exclude_none=hide_values))
 
-@models_to_json.register
-def models_to_json(models: Entity, hide_values: bool = False) -> str:
-    return json.dumps(models.model_dump(mode="json", exclude_none=hide_values))
-
-@multimethod
-def models_to_table(models: List[Entity]) -> Table:
-    table = Table(title="Models")
-    # TODO: make this more generic, not hardcoded
-    fields = [field for field in models[0].model_fields if field != "values"]
-    for field in fields:
-        table.add_column(field)
-    for model in models:
-        row = model.model_dump(mode="json")
-        table.add_row(*[str(row[field]) for field in fields])
-    return table
-
-@models_to_table.register
-def models_to_table(model: Entity) -> Table:
-    table = Table(title=model.__class__.__name__)
-    for field in model.model_fields:
-        table.add_column(field)
-    row = model.model_dump(mode="json")
-    table.add_row(*[str(row[field]) for field in model.model_fields])
-    return table
+def models_to_table(models: Union[List[SQLModel], SQLModel]) -> Table:
+    """Convert SQLModel instances to Rich table. Accepts either a single model or a list of models."""
+    if isinstance(models, list):
+        table = Table(title="Models")
+        if not models:
+            return table
+        # TODO: make this more generic, not hardcoded
+        fields = [field for field in models[0].model_fields if field != "values"]
+        for field in fields:
+            table.add_column(field)
+        for model in models:
+            row = model.model_dump(mode="json")
+            table.add_row(*[str(row[field]) for field in fields])
+        return table
+    else:
+        table = Table(title=models.__class__.__name__)
+        for field in models.model_fields:
+            table.add_column(field)
+        row = models.model_dump(mode="json")
+        table.add_row(*[str(row[field]) for field in models.model_fields])
+        return table

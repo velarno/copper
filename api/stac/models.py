@@ -11,8 +11,6 @@ logger = logging.getLogger(__name__)
 
 retrieve_url_pattern = r'https://cds.climate.copernicus.eu/api/retrieve/v1/processes/{dataset_id}'
 
-Entity = TypeVar("Entity", bound=SQLModel)
-
 class CatalogRelType(enum.Enum):
     child = "child"
     parent = "parent"

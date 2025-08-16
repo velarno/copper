@@ -374,7 +374,6 @@ class TemplateUpdater:
                 self.add_parameter(parameter_name, str(value))
 
             self.update_cost()
-        
 
     def add_parameter(self, parameter_name: str, parameter_value: str):
         with self.session as session:
@@ -488,9 +487,10 @@ class TemplateUpdater:
     def create_template_from_dict(data: Dict[str, Any]) -> Template:
         metadata, parameters = parse_metadata(data)
         with Session(engine) as session:
+            collection = collection_from_dataset_id(metadata["dataset_id"])
             template = Template(
                 name=metadata["template_name"],
-                collection_id=metadata["dataset_id"],
+                collection_id=collection.id,
                 cost=0
             )
             session.add(template)
@@ -506,6 +506,7 @@ class TemplateUpdater:
             session.add_all(template.parameters)
             session.commit()
             session.refresh(template)
+        return template
 
     def fetch_sub_templates(self, prefix: str = "sub") -> List[Template]:
         sub_template_prefix = f"{prefix}_{self.template_name}_"

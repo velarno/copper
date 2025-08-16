@@ -5,6 +5,7 @@ import typer
 from cdsapi import Client
 from typing import Optional
 from rich.console import Console
+from api.stac.optimizer import TemplateOptimizer
 from api.stac.crud import CollectionBrowser, TemplateUpdater
 from api.stac.utils import models_to_json, models_to_table
 from api.stac.config import OutputFormat, CostMethod
@@ -155,12 +156,11 @@ def history(
 ):
     template_updater = TemplateUpdater(template_name)
     history = template_updater.fetch_latest_history()
-    console.print_json(models_to_json([history]))
+    console.print_json(models_to_json(history))
 
-@app.command(
-    name="mandatory",
-    help="Show the mandatory parameters of a template",
-)
+@app.command(name="req", hidden=True)
+@app.command(name="required", hidden=True)
+@app.command(name="mandatory", help="Show the mandatory parameters of a template (aliases: req, required, mandatory)")
 def mandatory(
     template_name: str = typer.Argument(..., help="Template name"),
 ):
@@ -209,3 +209,22 @@ def load(
     if template_name:
         template_updater.template_name = template_name
     console.print_json(template_updater.to_json(with_metadata=False))
+
+@app.command(name="optim", help="Optimize a template", hidden=True)
+@app.command(name="opt", help="Optimize a template", hidden=True)
+@app.command(name="split", help="Split a template into smaller templates", hidden=True)
+@app.command(name="budget", help="Split a template into smaller templates to meet a budget", hidden=True)
+@app.command(name="optimize", help="Split a template into smaller templates to meet a budget (aliases: optim, opt, split, budget)")
+def optimize(
+    template_name: str = typer.Argument(..., help="Template name"),
+    budget: float = typer.Option(..., "--budget", "-b", help="Budget"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Dry run"),
+):
+    template_updater = TemplateUpdater(template_name)
+    optimizer = TemplateOptimizer(template_updater, budget=budget)
+    optimizer.ensure_budget(name="year")
+    if dry_run:
+        console.print("Dry run, no templates were created")
+        console.print(f"Template {template_name} would have been split into {len(optimizer.valid)} templates")
+    else:
+        optimizer.persist_templates()

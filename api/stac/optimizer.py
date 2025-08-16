@@ -1,9 +1,12 @@
 import json
+import logging
 from copy import deepcopy
 from math import prod
 from collections import deque
 from typing import Optional, List
 from api.stac.crud import TemplateUpdater, add_metadata
+
+logger = logging.getLogger(__name__)
 
 class TemplateOptimizer:
     """
@@ -28,7 +31,8 @@ class TemplateOptimizer:
     
     def __init__(self,
         template_updater: Optional[TemplateUpdater] = None,
-        template_name: Optional[str] = None
+        template_name: Optional[str] = None,
+        budget: Optional[float] = None
         ) -> None:
         if template_updater:
             self.template_updater = template_updater
@@ -39,6 +43,7 @@ class TemplateOptimizer:
         self.valid = deque()
         self.queue = deque()
         self.queue.append(self.template_updater.to_dict())
+        self.budget = budget
 
     def split_parameters(self, name: str, state: dict) -> None:
         param_values = state[name]
@@ -50,8 +55,18 @@ class TemplateOptimizer:
         first[name] = param_values[cutoff:]
         second[name] = param_values[:cutoff]
 
-        self.queue.append(first)
-        self.queue.append(second)
+        if self.cost(first) > self.budget:
+            logger.info(f"splitting sub-template with cost = {self.cost(first)} > {self.budget}")
+            self.queue.append(first)
+        else:
+            logger.info(f"appending sub-template with cost = {self.cost(first)} <= {self.budget}")
+            self.valid.append(first)
+        if self.cost(second) > self.budget:
+            logger.info(f"splitting sub-template with cost = {self.cost(second)} > {self.budget}")
+            self.queue.append(second)
+        else:
+            logger.info(f"appending sub-template with cost = {self.cost(second)} <= {self.budget}")
+            self.valid.append(second)
 
     def cost(self, state: dict) -> float:
         # TODO: centralize cost calculation and import it here
@@ -64,17 +79,18 @@ class TemplateOptimizer:
     def min_cost(self) -> float:
         return min(self.costs)
 
-    def ensure_budget(self, name: str, budget: float):
+    def ensure_budget(self, name: str):
         # TODO: use a priority queue to split the highest cost state
         # TODO: enqueue the over budget states, each step pop the highest cost state & split it
         # TODO: if the state is under budget, yield it
         while self.queue:
             state = self.queue.pop()
             cost = self.cost(state)
-            print(f"cost: {cost}, budget: {budget}")
-            if cost <= budget:
+            if cost <= self.budget:
+                logger.info(f"appending sub-template with cost = {cost} <= {self.budget}")
                 self.valid.append(state)
             else:
+                logger.info(f"splitting sub-template with cost = {cost} > {self.budget}")
                 self.split_parameters(name, state)
         return list(self.valid)
 
@@ -100,10 +116,10 @@ class TemplateOptimizer:
             )
 
 if __name__ == "__main__":
-    optimizer = TemplateOptimizer(template_name="expensive")
+    optimizer = TemplateOptimizer(template_name="expensive", budget=400)
     print(optimizer.template_updater.to_json())
     print(optimizer.cost(optimizer.template_updater.to_dict()))
-    templates = optimizer.ensure_budget("year", 400)
+    templates = optimizer.ensure_budget("year")
     for template in templates:
         print(template)
     optimizer.persist_templates()
