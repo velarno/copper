@@ -203,4 +203,4 @@ def load(
     template_updater = TemplateUpdater.from_json(input_file)
     if template_name:
         template_updater.template_name = template_name
-    console.print_json(template_updater.to_json())
+    console.print_json(template_updater.to_json(with_metadata=False))

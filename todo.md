@@ -12,4 +12,10 @@
 - [x] Add a list of mandatory inputs for a template
 - [ ] Make sure each cost computation is saved in the history & current template
 - [x] Create a way to import template from JSON file
+- [ ] Add logic to fetch the budget from costing api if it is not set so far (dummy value of -1)
 - [ ] Create a basic template optimizer
+
+## Db related
+
+- [ ] Handle duplicate values better
+- [ ] 

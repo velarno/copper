@@ -95,6 +95,21 @@ def list_items(table: Tables, limit: Optional[int] = None):
         logger.error(f"Error listing items: {e}")
         raise e
 
+def add_metadata(state: Dict[str, Any], dataset_id: str, template_name: str) -> Dict[str, Any]:
+    """Add metadata to a template state."""
+    return {
+        "metadata": {
+            "dataset_id": dataset_id,
+            "template_name": template_name
+        },
+        "parameters": state
+    }
+
+def parse_metadata(state: Dict[str, Any]) -> Tuple[dict, dict]:
+    """Parse metadata from a template state."""
+    metadata = state.pop("metadata")
+    parameters = state.pop("parameters")
+    return metadata, parameters
 
 class CollectionBrowser:
     """
@@ -237,7 +252,7 @@ class TemplateUpdater:
         if any(key not in data for key in required_keys):
             raise ValueError("Invalid JSON data, missing required keys")
 
-        metadata, parameters = data["metadata"], data["parameters"]
+        metadata, parameters = parse_metadata(data)
         instance = cls(metadata['template_name'], metadata['dataset_id'])
         for pname, pdata in parameters.items():
             if isinstance(pdata, list):
@@ -391,6 +406,12 @@ class TemplateUpdater:
             self.refresh(session)
         self.update_cost()
 
+    def get_parameter_values(self, name: str) -> List[str]:
+        """Returns all values for parameter name `name`."""
+        with self.session as session:
+            self.refresh(session)
+            return [param.value for param in self.parameters if param.name == name]
+
     def remove_parameter(self, parameter_name: str):
         with self.session as session:
             self.refresh(session)
@@ -459,8 +480,34 @@ class TemplateUpdater:
 
     def delete(self):
         with self.session as session:
+            session.refresh(self.template)
             session.delete(self.template)
             session.commit()
+
+    @staticmethod
+    def create_template_from_dict(data: Dict[str, Any]) -> Template:
+        metadata, parameters = parse_metadata(data)
+        with Session(engine) as session:
+            template = Template(
+                name=metadata["template_name"],
+                collection_id=metadata["dataset_id"],
+                cost=0
+            )
+            session.add(template)
+            session.commit()
+            session.refresh(template)
+
+            for name, value in parameters.items():
+                if isinstance(value, list):
+                    for v in value:
+                        session.add(TemplateParameter(name=name, value=v, template_id=template.id))
+                else:
+                    session.add(TemplateParameter(name=name, value=value, template_id=template.id))
+            session.add_all(template.parameters)
+            session.commit()
+            session.refresh(template)
+
+        return template
 
 drop_existing = os.getenv("DROP_EXISTING", "false").lower() == "true"
 create_db_and_tables(drop_existing=drop_existing)
