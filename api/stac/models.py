@@ -42,6 +42,74 @@ class ParamType(enum.Enum):
 VariableType = Literal["string", "integer","boolean"]
 ArrayType = Literal["array"]
 
+## DATACLASSES
+
+@dataclass
+class StacLink:
+    rel: CollectionRelType
+    href: str
+    title: Optional[str]
+    mime_type: Optional[str]
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StacLink":
+        return cls(
+            rel=data["rel"],
+            href=data["href"],
+            title=data.get("title", None),
+            mime_type=data.get("mime_type", None)
+        )
+
+@dataclass
+class StacCollection:
+    id: str
+    title: str
+    description: str
+    created_at: datetime
+    updated_at: datetime
+    doi: Optional[str]
+    links: List[StacLink]
+    keywords: List[str]
+    retrieve_inputs: Optional[dict] = None
+
+    @classmethod
+    def from_response(cls, data: Dict[str, Any]) -> "StacCollection":
+        return cls(
+            id=data["id"],
+            title=data["title"],
+            description=data["description"],
+            created_at=datetime.fromisoformat(data["published"]),
+            updated_at=datetime.fromisoformat(data["updated"]),
+            doi=data.get("doi", None),
+            links=[StacLink.from_dict(link) for link in data["links"]],
+            keywords=data.get("keywords", []),
+        )
+
+    def find_bound_retrieve(self, retrieves: List["StacRetrieve"]) -> Optional["StacRetrieve"]:
+        retrieve = next((retrieve for retrieve in retrieves if retrieve.is_collection_bound(self)), None)
+        if retrieve:
+            self.retrieve_inputs = retrieve.inputs
+        return retrieve
+
+@dataclass
+class StacRetrieve:
+    title: str
+    description: str
+    collection_id: str
+    inputs: dict
+
+    def is_collection_bound(self, collection: "StacCollection") -> bool:
+        return self.collection_id == collection.id
+
+    @classmethod
+    def from_response(cls, data: Dict[str, Any]) -> "StacRetrieve":
+        return cls(
+            title=data["title"],
+            description=data["description"],
+            collection_id=data["id"],
+            inputs=data["inputs"]
+        )
+
 ## MODELS
 
 class CatalogLink(SQLModel, table=True):
@@ -79,6 +147,22 @@ class Collection(SQLModel, table=True):
             updated_at=datetime.fromisoformat(data["updated"]),
             doi=data.get("doi", None)
         )
+
+    @classmethod
+    def from_stac_collection(cls, collection: StacCollection) -> "Collection":
+        instance = cls(
+            collection_id=collection.id,
+            title=collection.title,
+            description=collection.description,
+            created_at=collection.created_at,
+            updated_at=collection.updated_at,
+            doi=collection.doi
+        )
+        keywords = [Keyword(keyword=keyword, collection=instance) for keyword in collection.keywords]
+        instance.keywords.extend(keywords)
+        links = [CollectionLink(url=link.href, rel=link.rel, mime_type=link.mime_type, title=link.title, collection=instance) for link in collection.links]
+        instance.links.extend(links)
+        return instance
 
     @property
     def retrieve_url(self) -> str:
