@@ -101,7 +101,7 @@ class STACConfig(BaseSettings):
     # Logging Configuration
     log_level: str = Field(
         default="INFO",
-        description="Logging level"
+        description="Logging level",
     )
     log_file: Optional[str] = Field(
         default="/tmp/copper.log",
@@ -135,6 +135,9 @@ class STACConfig(BaseSettings):
         valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
         if v.upper() not in valid_levels:
             raise ValueError(f"log_level must be one of {valid_levels}")
+        env_level = os.getenv('LOG_LEVEL', None)
+        if env_level:
+            return env_level.upper()
         return v.upper()
 
 # Global configuration instance

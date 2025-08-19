@@ -58,24 +58,24 @@ def insert_collections(collections: List[Collection]):
         logger.error(f"Error inserting collections: {e}")
         raise e
 
-def collection_from_id(collection_id: int) -> Collection:
+def collection_from_id(collection_id: int, session: Optional[Session] = None) -> Collection:
     """Get a collection from an ID."""
+    logger.info(f"Getting collection from ID: {collection_id}")
+    logger.info(f"Session: {session}")
     try:
-        with Session(engine) as session:
-            return session.exec(select(Collection).where(Collection.id == collection_id)).first()
+        if session is None:
+            session = Session(engine)
+        return session.exec(select(Collection).where(Collection.id == collection_id)).first()
     except Exception as e:
         logger.error(f"Error getting collection from ID: {e}")
         raise e
 
-def collection_from_dataset_id(dataset_id: str) -> Collection:
+def collection_from_dataset_id(dataset_id: str, session: Optional[Session] = None) -> Collection:
     """Get a collection from a dataset ID."""
     try:
-        with Session(engine) as session:
-            collection = session.exec(select(Collection).where(Collection.collection_id == dataset_id)).first()
-            if not collection:
-                logger.error(f"Collection with dataset ID {dataset_id} not found")
-                raise ValueError(f"Collection with dataset ID {dataset_id} not found")
-            return collection
+        if session is None:
+            session = Session(engine)
+        return session.exec(select(Collection).where(Collection.collection_id == dataset_id)).first()
     except Exception as e:
         logger.error(f"Error getting collection from dataset ID: {e}")
         raise e
@@ -132,7 +132,7 @@ class CollectionBrowser:
         self.dataset_id = dataset_id
         self.session = Session(engine)
         self.parameters = self.fetch_parameters()
-        self.collection = collection_from_dataset_id(self.dataset_id)
+        self.collection = collection_from_dataset_id(self.dataset_id, self.session)
 
     def refresh(self):
         self.parameters = self.fetch_parameters()
@@ -201,7 +201,7 @@ class TemplateUpdater:
     
     def init_from_template(self, template: Template):
         self.template = template
-        self.collection = collection_from_id(template.collection_id)
+        self.collection = collection_from_id(template.collection_id, self.session)
         self.template_name = self.template.name
         self.dataset_id = self.collection.collection_id
         self.cost = self.template.cost
@@ -213,19 +213,19 @@ class TemplateUpdater:
 
     def init_from_name(self, template_name: str) -> bool:
         """Returns `True` if existing template found, `False` if not and create needed"""
-        self.template, self.parameters, self.template_history = self.fetch_by_name(template_name)
+        self.template = self.fetch_by_name(template_name, self.session)
         if not self.template:
             return False
 
         self.template_name = template_name
-        self.collection = collection_from_id(self.template.collection_id)
+        self.collection = collection_from_id(self.template.collection_id, self.session)
         self.dataset_id = self.collection.collection_id
         self.cost = self.template.cost
 
         return True
 
     def create_template(self, template_name: str, dataset_id: str):
-        self.collection = collection_from_dataset_id(dataset_id)
+        self.collection = collection_from_dataset_id(dataset_id, self.session)
         self.template = Template(
             name=template_name,
             collection_id=self.collection.id,
@@ -286,7 +286,7 @@ class TemplateUpdater:
                     raise ValueError("Dataset ID is required to create a new template")
                 self.create_template(template_name, dataset_id)
         
-        self.refresh(self.session)
+        self.refresh()
         self.update_cost()
 
     @classmethod
@@ -297,16 +297,16 @@ class TemplateUpdater:
         return cls(template_name, template.collection_id, template)
 
     @staticmethod
-    def fetch_by_name(template_name: str) -> Tuple[Template, List[TemplateParameter], List[TemplateHistory]]:
-        with Session(engine) as session:
-            template: Optional[Template] = session.exec(select(Template).where(Template.name == template_name)).first()
-            if template is None:
-                raise ValueError(f"Template {template_name} not found")
-            return template, template.parameters, template.history
+    def fetch_by_name(template_name: str, session: Optional[Session] = None):
+        if session is None:
+            session = Session(engine)
+        template: Optional[Template] = session.exec(select(Template).where(Template.name == template_name)).first()
+        if template is None:
+            raise ValueError(f"Template {template_name} not found")
+        return template
     
-    @staticmethod
-    def fetch_history_from_id(template_id: int) -> TemplateHistory:
-        with Session(engine) as session:
+    def fetch_history_from_id(self, template_id: int) -> TemplateHistory:
+        with self.session as session:
             return session.exec(select(TemplateHistory).where(TemplateHistory.template_id == template_id)).fetchall()
 
     def fetch_latest_history(self) -> List[TemplateHistory]:
@@ -361,11 +361,13 @@ class TemplateUpdater:
         )
         return json.dumps(result, indent=indent)
 
-    def refresh(self, session: Session):
-        self.template = session.exec(select(Template).where(Template.name == self.template_name)).first()
-        self.collection = session.exec(select(Collection).where(Collection.collection_id == self.dataset_id)).first()
-        self.template_history = session.exec(select(TemplateHistory).where(TemplateHistory.template_id == self.template.id)).fetchall()
-        self.parameters = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id)).fetchall()
+    def refresh(self):
+        self.template = self.fetch_by_name(self.template_name, self.session)
+        self.collection = collection_from_id(self.template.collection_id, self.session)
+        self.template_history = self.fetch_history_from_id(self.template.id)
+        self.dataset_id = self.collection.collection_id
+        self.cost = self.template.cost
+        self.update_cost()
     
     def add_parameter_range(self, parameter_name: str, from_value: str, to_value: str):
         with self.session as session:

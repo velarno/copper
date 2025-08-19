@@ -29,6 +29,7 @@ class CollectionRelType(enum.Enum):
     messages = "messages"
     layout = "layout"
     related = "related"
+    qa = "qa"
 
 class ParamType(enum.Enum):
     enum = "enum"
