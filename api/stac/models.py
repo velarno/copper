@@ -134,9 +134,9 @@ class Collection(SQLModel, table=True):
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
     doi: Optional[str] = Field(None, description="DOI of the collection")
 
-    keywords: List["Keyword"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"})
-    links: List["CollectionLink"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"})
-    input_schema: Optional["InputSchema"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"})
+    keywords: List["Keyword"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    links: List["CollectionLink"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    input_schema: Optional["InputSchema"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
 
     @classmethod
     def from_response(cls, data: Dict[str, Any]) -> "Collection":
@@ -296,7 +296,7 @@ class InputSchema(SQLModel, table=True):
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
 
     collection: Optional["Collection"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"})
-    parameters: List["InputParameter"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"})
+    parameters: List["InputParameter"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
 
     @classmethod
     def create_with_parameters(cls, response_data: Dict[str, Any], collection: Collection):
@@ -474,8 +474,8 @@ class Template(SQLModel, table=True):
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
     cost: Optional[float] = Field(default=0, description="Cost of the template")
 
-    parameters: List["TemplateParameter"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"})
-    history: List["TemplateHistory"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"})
+    parameters: List["TemplateParameter"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    history: List["TemplateHistory"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
 
 class TemplateParameter(SQLModel, table=True):
     __tablename__ = "template_parameter"

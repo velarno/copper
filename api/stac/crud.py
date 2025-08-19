@@ -206,6 +206,22 @@ class TemplateUpdater:
     def parameters(self):
         return self.template.parameters
 
+    @property
+    def parameter_names(self) -> List[str]:
+        with self._session as session:
+            return list(
+                session.exec(
+                    select(TemplateParameter.name)
+                    .where(TemplateParameter.template_id == self.template.id)
+                    .distinct()
+                ).fetchall()
+            )
+    
+    @property
+    def template_exists(self) -> bool:
+        with self._session as session:
+            return session.exec(select(Template).where(Template.name == self.template_name)).first() is not None
+
     @staticmethod
     def list(limit: Optional[int] = None) -> List[Template]:
         with Session(engine) as session:
@@ -395,31 +411,27 @@ class TemplateUpdater:
     
     def add_parameter_range(self, parameter_name: str, from_value: str, to_value: str):
         with self.session as session:
-            self.refresh()
             for value in range(int(from_value), int(to_value) + 1):
                 self.add_parameter(parameter_name, str(value))
 
             self.update_cost()
 
     def add_parameter(self, parameter_name: str, parameter_value: str):
-        with self.session as session:
-            self.refresh()
+        with self._session as session:
             new_parameter = TemplateParameter(
                 template=self.template,
                 name=parameter_name,
                 value=parameter_value
             )
-            self.template.parameters.append(new_parameter)
+            self.parameters.append(new_parameter)
             new_history = TemplateHistory(data=self.to_dict(), template_id=self.template.id)
             self.template_history.append(new_history)
             session.add_all([new_history, new_parameter])
             session.commit()
-            self.refresh()
             self.update_cost()
 
     def update_parameter(self, parameter_name: str, old_value: str, new_value: str):
         with self.session as session:
-            self.refresh()
             to_update = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name, TemplateParameter.value == old_value)).first()
             if to_update is None:
                 raise ValueError(f"Parameter {parameter_name} not found")
@@ -428,18 +440,15 @@ class TemplateUpdater:
             session.add(new_history)
             self.template_history.append(new_history)
             session.commit()
-            self.refresh()
         self.update_cost()
 
     def get_parameter_values(self, name: str) -> List[str]:
         """Returns all values for parameter name `name`."""
-        with self.session as session:
-            self.refresh(session)
+        with self._session as session:
             return [param.value for param in self.parameters if param.name == name]
 
     def remove_parameter(self, parameter_name: str):
-        with self.session as session:
-            self.refresh(session)
+        with self._session as session:
             parameter = session.exec(
                 select(TemplateParameter)
                 .where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name)
@@ -448,7 +457,6 @@ class TemplateUpdater:
                 raise ValueError(f"Parameter {parameter_name} not found")
             session.delete(parameter)
             session.commit()
-            self.refresh(session)
         self.update_cost()
 
     def from_dict(self, data: Dict[str, Any]):
@@ -456,7 +464,7 @@ class TemplateUpdater:
         raise NotImplementedError("Be patient.")
 
     def allowed_parameters(self, hide_values: bool = False) -> List[SQLModel]:
-        with self.session as session:
+        with self._session as session:
             collection_parameters = session.exec(
                 select(InputParameter, InputSchema, Collection)
                 .join(InputSchema, InputParameter.input_schema_id == InputSchema.id)
