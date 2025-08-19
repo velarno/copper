@@ -105,7 +105,11 @@ def show(
     with_metadata: bool = typer.Option(False, "--metadata", "-M", help="Include template metadata in the output"),
 ):
     indent = None if compact else indent
-    template_updater = TemplateUpdater(template_name)
+    try:
+        template_updater = TemplateUpdater(template_name)
+    except ValueError:
+        console.print(f"Template {template_name} not found")
+        raise typer.Exit(1)
     console.print_json(template_updater.to_json(indent=indent, with_metadata=with_metadata))
 
 @app.command(name="par", hidden=True)
