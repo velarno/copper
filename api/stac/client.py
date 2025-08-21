@@ -3,7 +3,7 @@ import time
 import logging
 import asyncio
 import re
-from typing import Dict, Any, List, Optional, AsyncGenerator
+from typing import Dict, Any, List, Optional
 
 from .crud import engine, Session
 from .models import Collection, Keyword, CollectionLink, InputSchema, CatalogLink, StacCollection, StacRetrieve
@@ -265,7 +265,7 @@ class AsyncStacClient(httpx.AsyncClient):
         return ids
     
     async def fetch_collection_from_url(self, collection_url: str) -> StacCollection:
-        response: httpx.Response = await self.get(collection_url)
+        response: httpx.Response = await self.get(collection_url, timeout=config.timeout)
         data: Dict[str, Any] = response.json()
         return StacCollection.from_response(data)
 
@@ -309,6 +309,12 @@ class AsyncStacClient(httpx.AsyncClient):
             session.commit()
 
 stac_client = StacClient()
+async_stac_client = AsyncStacClient()
+
+async def init_all_collections():
+    collections = await async_stac_client.fetch_all_collections()
+    async_stac_client.persist_all(collections)
+    return collections
 
 if __name__ == "__main__":
     client = AsyncStacClient()

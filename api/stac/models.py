@@ -1,10 +1,15 @@
+from collections import Counter
 import json
 import enum
+from math import prod
 from dataclasses import dataclass
+from pydantic import computed_field
+from sqlalchemy.orm import object_session
+from sqlalchemy import func
 from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON, select, Session
 from sqlmodel.sql.expression import SelectOfScalar
 import logging
-from typing import Optional, Dict, Any, List, Literal, TypedDict, Union, TypeVar
+from typing import Optional, Dict, Any, List, Literal, TypedDict, Union
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -472,10 +477,17 @@ class Template(SQLModel, table=True):
     name: str = Field(..., description="Template name")
     created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
     updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
-    cost: Optional[float] = Field(default=0, description="Cost of the template")
 
-    parameters: List["TemplateParameter"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    parameters: List["TemplateParameter"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin", "cascade": "merge"}, cascade_delete=True)
     history: List["TemplateHistory"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+
+    @computed_field
+    @property
+    def cost(self) -> float:
+        logger.debug(f"Calculating cost for template {self.name}")
+        param_counts = Counter(param.name for param in self.parameters)
+        logger.debug(f"Parameter counts: {param_counts}")
+        return prod(param_counts.values())
 
 class TemplateParameter(SQLModel, table=True):
     __tablename__ = "template_parameter"

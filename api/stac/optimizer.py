@@ -107,7 +107,8 @@ class TemplateOptimizer:
         base_name = self.template_updater.template_name
         for i, tpl_state in enumerate(self.valid):
             padded_index = str(i).zfill(3)
-            self.template_updater.create_template_from_dict(
+            # TODO: test this with new session logic
+            template, _ = self.template_updater.create_template_from_dict(
                 add_metadata(
                     tpl_state,
                     self.template_updater.dataset_id,

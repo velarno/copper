@@ -69,10 +69,8 @@ def add(
     template_updater.commit()
     console.print_json(template_updater.to_json())
 
-@app.command(
-    name="update",
-    help="Update a parameter in a template",
-)
+@app.command(name="mv", hidden=True)
+@app.command(name="move",help="Update a parameter value in a template (alias: mv)")
 def update(
     template_name: str = typer.Argument(..., help="Template name"),
     parameter_name: str = typer.Argument(..., help="Parameter name"),
@@ -80,7 +78,7 @@ def update(
     new_value: str = typer.Argument(..., help="New parameter value"),
 ):
     template_updater = TemplateUpdater(template_name)
-    template_updater.update_parameter(parameter_name, old_value, new_value)
+    template_updater.update_parameter_value(parameter_name, old_value, new_value)
     template_updater.commit()
     console.print_json(template_updater.to_json())
 

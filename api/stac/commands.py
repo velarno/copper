@@ -1,10 +1,12 @@
+import os
 import typer
 import logging
+import asyncio
 from rich.console import Console
 from typing import List
 
-from api.stac.client import stac_client
-from api.stac.crud import engine, Session, list_items, TemplateUpdater
+from api.stac.client import async_stac_client, init_all_collections
+from api.stac.crud import engine, Session, list_items
 from api.stac.models import Tables
 from api.stac.config import OutputFormat
 
@@ -22,35 +24,13 @@ app = typer.Typer(
     help="Initialize the STAC tables",
 )
 def init(
-    drop_existing: bool = typer.Option(False, help="Drop existing tables"),
-    with_catalog: bool = typer.Option(False, "--catalog", "-K", help="Fetch catalog links from the Copernicus STAC API"),
-    with_collections: bool = typer.Option(False, "--collections", "-C", help="Fetch all collections from the Copernicus STAC API"),
-    with_schema: bool = typer.Option(False, "--schema", "-S", help="Fetch schema for all collections"),
-    with_all: bool = typer.Option(False, "--all", "-A", help="Fetch all collections and schema"),
-    limit: int = typer.Option(None, "--limit", "-l", help="Limit the number of collections to fetch"),
-    silent: bool = typer.Option(False, "--silent", "-s", help="Do not show progress"),
+    progress: bool = typer.Option(False, "--progress", "-p", help="Show progress"),
 ):
-    if with_all:
-        with_catalog = with_collections = with_schema = True
-    # if downstream data is to be fetched, force upstream to also be true
-    if with_collections:
-        with_catalog = True
-    if with_schema:
-        with_collections = with_catalog = True
-
-    with Session(engine) as session:
-        # if fetch collections, then catalog is fetched automatically
-        if with_catalog:
-            catalog_links = stac_client.fetch_catalog_links(session)
-        if with_collections:
-            stac_client.fetch_all_collections(
-                catalog_links=catalog_links,
-                session=session,
-                with_inputs=with_schema,
-                silent=silent,
-                limit=limit,
-            )
-        session.commit()
+    if progress:
+        logger.warning("Progress is not implemented yet")
+    collections = asyncio.run(init_all_collections())
+    async_stac_client.persist_all(collections)
+    console.print(f"Initialized {len(collections)} collections")
     
 @app.command(
     name="list",

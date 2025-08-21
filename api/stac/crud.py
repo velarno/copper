@@ -7,15 +7,13 @@ import pandas as pd
 from math import prod
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from requests import session
 from sqlmodel import SQLModel, create_engine, Session, select, col
 
 from .models import (
     CatalogLink, Collection, CollectionLink, CollectionRelType,
     CostEstimate, InputParameter, InputSchema,
-    Keyword, Template, TemplateHistory, TemplateParameter,
-    TemplateCostHistory, Tables,
-    TemplateHistory
+    Template, TemplateParameter,
+    Tables,
 )
 from .config import config, cost_headers, CostMethod
 
@@ -183,6 +181,21 @@ class CollectionBrowser:
             .parameter.tolist()
         )
 
+def state_cost_estimate(data: dict) -> CostEstimate:
+    """
+    Estimate the cost of a template (in python dict format)
+    """
+    n_params: Dict[str, int] = {
+        key : len(values) if isinstance(values, list) else 1
+        for key, values in data.items()
+    }
+    return CostEstimate(
+        cost=max(1, prod(n_params.values())),
+        limit=-1,
+        request_is_valid=True,
+        invalid_reason=None
+    )
+
 
 class TemplateUpdater:
     """
@@ -192,8 +205,6 @@ class TemplateUpdater:
     template_name: str
     template: Template
     collection: Collection
-    template_history: List[TemplateHistory]
-    cost: float
     _session: Optional[Session]
 
     @property
@@ -222,9 +233,13 @@ class TemplateUpdater:
         with self._session as session:
             return session.exec(select(Template).where(Template.name == self.template_name)).first() is not None
 
+    @property
+    def cost(self) -> float:
+        return self.template.cost
+
     @staticmethod
     def list(limit: Optional[int] = None) -> List[Template]:
-        with Session(engine) as session:
+        with Session(engine, expire_on_commit=False) as session:
             query = select(Template)
             if limit:
                 query = query.limit(limit)
@@ -234,7 +249,6 @@ class TemplateUpdater:
         self.template = template
         self.collection = collection_from_id(template.collection_id, self.session)
         self.dataset_id = self.collection.collection_id
-        self.cost = self.template.cost
 
         with self._session as session:
             session.merge(self.template)
@@ -242,31 +256,25 @@ class TemplateUpdater:
 
     def init_from_name(self, template_name: str) -> bool:
         """Returns `True` if existing template found, `False` if not and create needed"""
-        self.template = self.fetch_by_name(template_name, self.session)
-        if not self.template:
-            return False
-
-        self.template_name = template_name
-        self.collection = collection_from_id(self.template.collection_id, self.session)
-        self.dataset_id = self.collection.collection_id
-        self.cost = self.template.cost
-
+        with self._session as session:
+            self.template = session.exec(select(Template).where(Template.name == template_name)).first()
+            if not self.template:
+                return False
+            self.template_name = template_name
+            self.collection = session.exec(select(Collection).where(Collection.id == self.template.collection_id)).first()
+            self.dataset_id = self.collection.collection_id
         return True
 
     def create_template(self, template_name: str, dataset_id: str):
-        self.collection = collection_from_dataset_id(dataset_id, self.session)
-        self.template = Template(
-            name=template_name,
-            collection_id=self.collection.id,
-            cost=0
-        )
-        self.template_name = template_name
-        self.dataset_id = dataset_id
-        self.template_history = []
-        self.parameters = []
-        self.template_history = [TemplateHistory(data={})]
-        self.update_cost()
-        self.commit()
+        with self._session as session:
+            self.collection = session.exec(select(Collection).where(Collection.collection_id == dataset_id)).first()
+            self.template = Template(
+                name=template_name,
+                collection_id=self.collection.id,
+                cost=0
+            )
+            session.add(self.template)
+            session.commit()
         
     @classmethod
     def from_json(cls, path: Optional[Path] = None, json_data: Optional[str] = None):
@@ -287,12 +295,9 @@ class TemplateUpdater:
         if any(key not in data for key in required_keys):
             raise ValueError("Invalid JSON data, missing required keys")
 
-        session = Session(engine, expire_on_commit=False)
-
-        with session:
-            template = cls.create_template_from_dict(data, session=session)
-            instance = cls(template=template, template_name=template.name)
-            instance._session = session
+        template, session = cls.create_template_from_dict(data)
+        instance = cls(template=template, template_name=template.name)
+        instance._session = session
         return instance
 
     def __init__(self, template_name: str, dataset_id: Optional[str] = None, template: Optional[Template] = None) -> None:
@@ -300,7 +305,6 @@ class TemplateUpdater:
         self.template_name = template_name
         self.template = None
         self.collection = None
-        self.template_history: List[TemplateHistory] = []
         self._session = Session(engine, expire_on_commit=False)
 
         if template is not None:
@@ -315,7 +319,6 @@ class TemplateUpdater:
                 if not dataset_id:
                     raise ValueError("Dataset ID is required to create a new template")
                 self.create_template(template_name, dataset_id)
-            self.update_cost()
 
     @classmethod
     def from_name(cls, template_name: str) -> "TemplateUpdater":
@@ -342,29 +345,16 @@ class TemplateUpdater:
         if template is None:
             return None
         return template
-    
-    def fetch_history_from_id(self, template_id: int) -> TemplateHistory:
-        with self._session as session:
-            return session.exec(select(TemplateHistory).where(TemplateHistory.template_id == template_id)).fetchall()
-
-    def fetch_latest_history(self) -> List[TemplateHistory]:
-        with self._session as session:
-            return session.exec(
-                select(TemplateHistory)
-                .where(TemplateHistory.template_id == self.template.id)
-                .order_by(TemplateHistory.created_at)
-                ).fetchall()
 
     def commit(self):
         with self._session as session:
             session.add(self.template)
-            session.add_all(self.template_history)
             session.add_all(self.parameters)
             session.commit()
 
     def to_dict(self) -> Dict[str, Any]:
         serialized = {}
-        with self.session:
+        with self._session as session:
             for parameter in self.parameters:
                 if parameter.name not in serialized:
                     serialized[parameter.name] = [parameter.value]
@@ -404,60 +394,89 @@ class TemplateUpdater:
         with self._session as session:
             session.merge(self.template)
             session.merge(self.collection)
-            session.refresh(self.template, ["parameters", "history", "collection"])
+            session.refresh(self.template, ["parameters", "collection"])
             self.dataset_id = self.collection.collection_id
-            self.cost = self.template.cost
-        self.update_cost()
     
     def add_parameter_range(self, parameter_name: str, from_value: str, to_value: str):
-        with self.session as session:
+        with self._session as session:
             for value in range(int(from_value), int(to_value) + 1):
                 self.add_parameter(parameter_name, str(value))
 
-            self.update_cost()
-
     def add_parameter(self, parameter_name: str, parameter_value: str):
         with self._session as session:
+            template = session.get(Template, self.template.id)
             new_parameter = TemplateParameter(
-                template=self.template,
+                template=template,
                 name=parameter_name,
                 value=parameter_value
             )
-            self.parameters.append(new_parameter)
-            new_history = TemplateHistory(data=self.to_dict(), template_id=self.template.id)
-            self.template_history.append(new_history)
-            session.add_all([new_history, new_parameter])
+            session.add(new_parameter)
+            template.parameters.append(new_parameter)
             session.commit()
-            self.update_cost()
+            session.refresh(template, ["parameters"])
+            self.template = template
+            logger.debug(f"Added parameter {parameter_name} to template {self.template.name}")
 
-    def update_parameter(self, parameter_name: str, old_value: str, new_value: str):
-        with self.session as session:
+    def update_parameter_value(self, parameter_name: str, old_value: str, new_value: str):
+        with self._session as session:
             to_update = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name, TemplateParameter.value == old_value)).first()
             if to_update is None:
                 raise ValueError(f"Parameter {parameter_name} not found")
             to_update.value = new_value
-            new_history = TemplateHistory(data=self.to_dict(), template_id=self.template.id)
-            session.add(new_history)
-            self.template_history.append(new_history)
+            session.add(to_update)
             session.commit()
-        self.update_cost()
+    
+    def update_parameter_values(self, parameter_name: str, parameter_values: List[str]):
+        with self._session as session:
+            to_update = session.exec(select(TemplateParameter).where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name)).fetchall()
+            existing_values = set(param.value for param in to_update)
+            new_values = set(parameter_values).difference(existing_values)
+            for value in new_values:
+                self.add_parameter(parameter_name, value)
+            for value in existing_values.difference(parameter_values):
+                self.remove_parameter_value(parameter_name, value)
 
     def get_parameter_values(self, name: str) -> List[str]:
         """Returns all values for parameter name `name`."""
         with self._session as session:
             return [param.value for param in self.parameters if param.name == name]
 
+    def remove_parameter_value(self, parameter_name: str, parameter_value: str):
+        with self._session as session:
+            template = session.get(Template, self.template.id)
+            to_remove = session.exec(
+                select(TemplateParameter)
+                .where(
+                    TemplateParameter.template_id == template.id,
+                    TemplateParameter.name == parameter_name,
+                    TemplateParameter.value == parameter_value
+                )
+            ).fetchall()
+            if to_remove is None:
+                raise ValueError(f"Parameter {parameter_name} not found")
+            for param in to_remove:
+                logger.debug(f"Removing parameter value {param.value} for parameter {param.name} from template {self.template.name}")
+                session.delete(param)
+                template.parameters.remove(param)
+            session.commit()
+            session.refresh(template, ["parameters"])
+            self.template = template
+
+
     def remove_parameter(self, parameter_name: str):
         with self._session as session:
-            parameter = session.exec(
-                select(TemplateParameter)
-                .where(TemplateParameter.template_id == self.template.id, TemplateParameter.name == parameter_name)
-            ).first()
-            if parameter is None:
+            template = session.get(Template, self.template.id)
+            parameters = template.parameters
+            parameter_values = [ param for param in parameters if param.name == parameter_name]
+            if not parameter_values:  # TODO: check if this is correct
                 raise ValueError(f"Parameter {parameter_name} not found")
-            session.delete(parameter)
+            for param in parameter_values:
+                session.delete(param)
+                template.parameters.remove(param)
             session.commit()
-        self.update_cost()
+            session.refresh(template, ["parameters"])
+            self.template = template
+            logger.debug(f"Removed parameter {parameter_name} from template {self.template.name}")
 
     def from_dict(self, data: Dict[str, Any]):
         # TODO: find a way to set current state from a dict
@@ -479,32 +498,30 @@ class TemplateUpdater:
                 return params
             return [param for param, schema, collection in collection_parameters]
 
-    def compute_cost(self, method: CostMethod) -> CostEstimate:
+    def compute_cost(self, method: CostMethod, commit_update: bool = False) -> CostEstimate:
         match method:
             case CostMethod.local:
-                self.cost = self._estimate_cost()
+                cost_estimate = self._estimate_cost()
             case CostMethod.api:
-                self.cost = self._fetch_cost()
+                cost_estimate = self._fetch_cost()
             case _:
                 raise ValueError(f"Invalid cost method: {method}")
-        return self.cost
+
+        if commit_update:
+            with self._session as session:
+                session.merge(self.template)
+                session.refresh(self.template)
+                session.commit()
+        
+        return cost_estimate
 
     def update_cost(self):
-        self.compute_cost(CostMethod.local)
+        self.compute_cost(CostMethod.local, commit_update=True)
         self.commit()
 
     def _estimate_cost(self) -> CostEstimate:
         data = self.to_dict()
-        n_params: Dict[str, int] = {
-            key : len(values) if isinstance(values, list) else 1
-            for key, values in data.items()
-        }
-        return CostEstimate(
-            cost=max(1, prod(n_params.values())),
-            limit=-1,
-            request_is_valid=True,
-            invalid_reason=None
-        )
+        return state_cost_estimate(data)
     
     def _fetch_cost(self) -> CostEstimate:
         client = httpx.Client()
@@ -515,35 +532,46 @@ class TemplateUpdater:
         return CostEstimate.from_response(data)
 
     def delete(self):
-        with self.session as session:
-            # TODO: ensure history is loaded in session to allow cascade delete
-            session.delete(self.template)
+        # TODO: when deleting, make sure cascade delete happens on parameters
+        with self._session as session:
+            logger.debug(f"Deleting template {self.template.name}")
+            to_delete = session.exec(select(Template).where(Template.id == self.template.id)).fetchall()
+            for template in to_delete:
+                for parameter in template.parameters:
+                    session.delete(parameter)
+                session.delete(template)
             session.commit()
 
     @staticmethod
-    def create_template_from_dict(data: Dict[str, Any], session: Optional[Session] = None) -> Template:
+    def create_template_from_dict(data: Dict[str, Any], session: Optional[Session] = None) -> Tuple[Template, Session]:
         metadata, parameters = parse_metadata(data)
         if session is None:
             session = Session(engine, expire_on_commit=False)
         
         collection = collection_from_dataset_id(metadata["dataset_id"], session)
         template_name = metadata["template_name"]
+        existing_parameters = []
         with session:
             existing_template = TemplateUpdater.fetch_by_name(template_name, session)
             if existing_template:
                 logger.warning(f"Template with name '{template_name}' already exists, updating it.")
                 template = existing_template
+                existing_parameters = template.parameters
             else:
                 template = Template(
                     name=metadata["template_name"],
                     collection_id=collection.id,
-                    cost=0
+                    cost=state_cost_estimate(parameters).cost
                 )
                 session.add(template)
 
             entities = []
 
             for name, value in parameters.items():
+                if name in existing_parameters:
+                    # TODO: allow to update parameters, for now just skip
+                    logger.warning(f"Parameter {name} already exists, skipping.")
+                    continue
                 if isinstance(value, list):
                     for v in value:
                         entities.append(TemplateParameter(name=name, value=v, template=template))
@@ -552,11 +580,11 @@ class TemplateUpdater:
             
             session.add_all(entities)
             session.commit()
-        return template
+        return template, session
 
     def fetch_sub_templates(self, prefix: str = "sub") -> List[Template]:
         sub_template_prefix = f"{prefix}_{self.template_name}_"
-        with self.session as session:
+        with self._session as session:
             return list(
                 session.exec(
                     select(Template)
