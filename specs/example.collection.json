@@ -1,0 +1,83 @@
+{
+  "type": "Collection",
+  "id": "dataset_id",
+  "stac_version": "1.0.0",
+  "title": "...",
+  "description": "...",
+  "keywords": [
+    "..."
+  ],
+  "license": "proprietary",
+  "extent": {
+    "...": "..."
+  },
+  "links": [
+    {
+      "rel": "self",
+      "type": "application/json",
+      "href": "https://cds_catalogue_url/dataset_id"
+    },
+    {
+      "rel": "parent",
+      "type": "application/json",
+      "href": "https://cds_catalogue_url/"
+    },
+    {
+      "rel": "root",
+      "type": "application/json",
+      "href": "https://cds_catalogue_url/"
+    },
+    {
+      "rel": "license",
+      "href": "https://example.com/license.pdf",
+      "title": "CC-BY licence"
+    },
+    {
+      "rel": "form",
+      "href": "https://example.com/form.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "constraints",
+      "href": "https://example.com/constraints.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "retrieve",
+      "href": "https://cds.climate.copernicus.eu/api/retrieve/v1/processes/dataset_id",
+      "type": "application/json"
+    },
+    {
+      "rel": "costing_api",
+      "href": "https://cds.climate.copernicus.eu/api/retrieve/v1/processes/dataset_id/costing",
+      "type": "application/json"
+    },
+    {
+      "rel": "layout",
+      "href": "https://example.com/layout.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "messages",
+      "href": "https://cds_catalogue_url/dataset_id/messages",
+      "title": "All messages related to the selected dataset"
+    }
+  ],
+  "assets": {
+    "thumbnail": {
+      "href": "https://example.com/thumbnail.jpg",
+      "type": "image/jpg",
+      "roles": [
+        "thumbnail"
+      ]
+    }
+  },
+  "published": "2023-05-25T00:00:00Z",
+  "updated": "2023-05-25T00:00:00Z",
+  "sci:doi": "10.UVXYZ/cds.xxxxyyyzzz",
+  "cads:disabled_reason": null,
+  "cads:sanity_check": {
+    "status": "...",
+    "timestamp": null
+  }
+}

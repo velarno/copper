@@ -14,8 +14,8 @@ datasets.db-shm
 datasets.db-wal
 .pdm-build/
 data/
+/*.json
 *.zip
-*.json
 *.csv
 *.tsv
 *.parquet
