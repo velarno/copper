@@ -3,6 +3,7 @@ import pytest
 from pathlib import Path
 
 from api.stac.crud import TemplateUpdater
+from api.stac.optimizer import TemplateOptimizer
 
 test_dir = Path(__file__).parent
 
@@ -40,6 +41,14 @@ def test_remove_parameter_values_update_cost(sample_template_updater):
     assert template_updater.cost == 1620
     template_updater.add_parameter("year", "2013")
     assert template_updater.cost == 1800
+
+def test_template_optimizer(sample_template_updater):
+    template_updater = sample_template_updater
+    optimizer = TemplateOptimizer(template_updater=template_updater, budget=400)
+    templates =optimizer.ensure_budget("year")
+    assert len(templates) > 0
+    assert not(any(optimizer.cost(template) > 400 for template in templates))
+
 
 def test_delete_template(sample_template_updater):
     template_updater = sample_template_updater
