@@ -14,9 +14,16 @@
 ## Db related
 
 - [ ] Handle duplicate values better
+- [ ] Add logic to store mandatory params
 - [ ] Add some field on template to help distinguish between templates & sub-templates
 - [ ] Add some fields on template to indicate if it was downloaded & some machine id + time
 
 ## Logic & Efficiency
 
 - [ ] Try to check if other optim approaches get bigger gains when the expected n-th split along the same dim would yield a small improvement
+
+## Testing
+
+- [ ] Add checks for utils submodule
+- [ ] Clean older files which do not require testing
+- [ ] Add basic tests to cli

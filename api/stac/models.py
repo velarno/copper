@@ -4,8 +4,6 @@ import enum
 from math import prod
 from dataclasses import dataclass
 from pydantic import computed_field
-from sqlalchemy.orm import object_session
-from sqlalchemy import func
 from sqlmodel import SQLModel, Relationship, Enum, Column, Field, JSON, select, Session
 from sqlmodel.sql.expression import SelectOfScalar
 import logging
@@ -14,13 +12,17 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-retrieve_url_pattern = r'https://cds.climate.copernicus.eu/api/retrieve/v1/processes/{dataset_id}'
+retrieve_url_pattern = (
+    r"https://cds.climate.copernicus.eu/api/retrieve/v1/processes/{dataset_id}"
+)
+
 
 class CatalogRelType(enum.Enum):
     child = "child"
     parent = "parent"
     self = "self"
     root = "root"
+
 
 class CollectionRelType(enum.Enum):
     self = "self"
@@ -36,6 +38,7 @@ class CollectionRelType(enum.Enum):
     related = "related"
     qa = "qa"
 
+
 class ParamType(enum.Enum):
     enum = "enum"
     array = "array"
@@ -43,12 +46,14 @@ class ParamType(enum.Enum):
     string = "string"
     boolean = "boolean"
 
+
 ## TYPES
 
-VariableType = Literal["string", "integer","boolean"]
+VariableType = Literal["string", "integer", "boolean"]
 ArrayType = Literal["array"]
 
 ## DATACLASSES
+
 
 @dataclass
 class StacLink:
@@ -56,15 +61,16 @@ class StacLink:
     href: str
     title: Optional[str]
     mime_type: Optional[str]
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "StacLink":
         return cls(
             rel=data["rel"],
             href=data["href"],
             title=data.get("title", None),
-            mime_type=data.get("mime_type", None)
+            mime_type=data.get("mime_type", None),
         )
+
 
 @dataclass
 class StacCollection:
@@ -91,11 +97,17 @@ class StacCollection:
             keywords=data.get("keywords", []),
         )
 
-    def find_bound_retrieve(self, retrieves: List["StacRetrieve"]) -> Optional["StacRetrieve"]:
-        retrieve = next((retrieve for retrieve in retrieves if retrieve.is_collection_bound(self)), None)
+    def find_bound_retrieve(
+        self, retrieves: List["StacRetrieve"]
+    ) -> Optional["StacRetrieve"]:
+        retrieve = next(
+            (retrieve for retrieve in retrieves if retrieve.is_collection_bound(self)),
+            None,
+        )
         if retrieve:
             self.retrieve_inputs = retrieve.inputs
         return retrieve
+
 
 @dataclass
 class StacRetrieve:
@@ -113,20 +125,30 @@ class StacRetrieve:
             title=data["title"],
             description=data["description"],
             collection_id=data["id"],
-            inputs=data["inputs"]
+            inputs=data["inputs"],
         )
 
+
 ## MODELS
+
 
 class CatalogLink(SQLModel, table=True):
     __tablename__ = "catalog_link"
     id: Optional[int] = Field(default=None, primary_key=True)
     collection_url: str = Field(..., description="Collection URL", unique=True)
-    rel: CatalogRelType = Field(sa_column=Column(Enum(CatalogRelType)), description="Relative link to the collection")
+    rel: CatalogRelType = Field(
+        sa_column=Column(Enum(CatalogRelType)),
+        description="Relative link to the collection",
+    )
     title: Optional[str] = Field(None, description="Collection title")
     mime_type: Optional[str] = Field(None, description="MIME type of the collection")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
+
 
 class Collection(SQLModel, table=True):
     __tablename__ = "collection"
@@ -135,13 +157,29 @@ class Collection(SQLModel, table=True):
     collection_id: str = Field(..., description="Collection identifier")
     title: str = Field(..., description="Collection title")
     description: str = Field(..., description="Collection description")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
     doi: Optional[str] = Field(None, description="DOI of the collection")
 
-    keywords: List["Keyword"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
-    links: List["CollectionLink"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
-    input_schema: Optional["InputSchema"] = Relationship(back_populates="collection", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    keywords: List["Keyword"] = Relationship(
+        back_populates="collection",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        cascade_delete=True,
+    )
+    links: List["CollectionLink"] = Relationship(
+        back_populates="collection",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        cascade_delete=True,
+    )
+    input_schema: Optional["InputSchema"] = Relationship(
+        back_populates="collection",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        cascade_delete=True,
+    )
 
     @classmethod
     def from_response(cls, data: Dict[str, Any]) -> "Collection":
@@ -151,7 +189,7 @@ class Collection(SQLModel, table=True):
             description=data["description"],
             created_at=datetime.fromisoformat(data["published"]),
             updated_at=datetime.fromisoformat(data["updated"]),
-            doi=data.get("doi", None)
+            doi=data.get("doi", None),
         )
 
     @classmethod
@@ -162,11 +200,23 @@ class Collection(SQLModel, table=True):
             description=collection.description,
             created_at=collection.created_at,
             updated_at=collection.updated_at,
-            doi=collection.doi
+            doi=collection.doi,
         )
-        keywords = [Keyword(keyword=keyword, collection=instance) for keyword in collection.keywords]
+        keywords = [
+            Keyword(keyword=keyword, collection=instance)
+            for keyword in collection.keywords
+        ]
         instance.keywords.extend(keywords)
-        links = [CollectionLink(url=link.href, rel=link.rel, mime_type=link.mime_type, title=link.title, collection=instance) for link in collection.links]
+        links = [
+            CollectionLink(
+                url=link.href,
+                rel=link.rel,
+                mime_type=link.mime_type,
+                title=link.title,
+                collection=instance,
+            )
+            for link in collection.links
+        ]
         instance.links.extend(links)
         return instance
 
@@ -174,34 +224,54 @@ class Collection(SQLModel, table=True):
     def retrieve_url(self) -> str:
         return retrieve_url_pattern.format(dataset_id=self.collection_id)
 
+
 class Keyword(SQLModel, table=True):
     __tablename__ = "keyword"
     id: Optional[int] = Field(default=None, primary_key=True)
     collection_id: int = Field(default=None, foreign_key="collection.id")
     keyword: str = Field(..., description="Keyword")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
-    collection: Optional[Collection] = Relationship(back_populates="keywords", sa_relationship_kwargs={"lazy": "selectin"})
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
+    collection: Optional[Collection] = Relationship(
+        back_populates="keywords", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 class CollectionLink(SQLModel, table=True):
     __tablename__ = "collection_link"
     id: Optional[int] = Field(default=None, primary_key=True)
     collection_id: int = Field(default=None, foreign_key="collection.id")
     url: str = Field(..., description="URL of the collection link")
-    rel: CollectionRelType = Field(sa_column=Column(Enum(CollectionRelType)), description="Relative link to the collection")
-    mime_type: Optional[str] = Field(None, description="MIME type of the collection link")
+    rel: CollectionRelType = Field(
+        sa_column=Column(Enum(CollectionRelType)),
+        description="Relative link to the collection",
+    )
+    mime_type: Optional[str] = Field(
+        None, description="MIME type of the collection link"
+    )
     title: Optional[str] = Field(None, description="Title of the collection link")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
 
-    collection: Optional[Collection] = Relationship(back_populates="links", sa_relationship_kwargs={"lazy": "selectin"})
+    collection: Optional[Collection] = Relationship(
+        back_populates="links", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 class StacEnumType(TypedDict):
     type: VariableType
     enum: List[str]
 
+
 class StacArrayType(TypedDict):
     type: ArrayType
     items: StacEnumType
+
 
 @dataclass
 class SingleEnumVariable:
@@ -217,12 +287,14 @@ class SingleEnumVariable:
     @property
     def values(self) -> List[str]:
         return self.schema["enum"]
-    
+
+
 @dataclass
 class SingleArrayVariable:
     """
     A variable that can take many values, possible choices are stored as array of strings.
     """
+
     title: str
     name: str
     schema: StacArrayType
@@ -240,12 +312,14 @@ class SingleArrayVariable:
     def type(self) -> VariableType:
         return self.items["type"]
 
+
 @dataclass
 class NumberArrayVariable:
     """
     A variable that is an array of numbers. Not to be confused with a variable that has multiple allowed
     values, documented in the schema as an enum array.
     """
+
     title: str
     name: str
     schema: StacArrayType
@@ -263,24 +337,34 @@ class NumberArrayVariable:
     def dimensions(self) -> List[str]:
         return [self.schema["minItems"], self.schema["maxItems"]]
 
+
 StacVariable = Union[SingleArrayVariable, SingleEnumVariable, NumberArrayVariable]
 
 
 def infer_type(name: str, json_schema: Dict[str, Any]) -> StacVariable:
     if "schema" in json_schema:
         if "enum" in json_schema["schema"]:
-            return SingleEnumVariable(name=name, title=json_schema["title"], schema=json_schema["schema"])
+            return SingleEnumVariable(
+                name=name, title=json_schema["title"], schema=json_schema["schema"]
+            )
         elif "default" in json_schema["schema"]:
-            return NumberArrayVariable(name=name, title=json_schema["title"], schema=json_schema["schema"])
+            return NumberArrayVariable(
+                name=name, title=json_schema["title"], schema=json_schema["schema"]
+            )
         elif "items" in json_schema["schema"]:
-            return SingleArrayVariable(name=name, title=json_schema["title"], schema=json_schema["schema"])
+            return SingleArrayVariable(
+                name=name, title=json_schema["title"], schema=json_schema["schema"]
+            )
         else:
             raise ValueError("Unsupported input data", json_schema)
     raise ValueError("Invalid input data", json_schema)
 
-def parse_dataset_inputs(json_data: Dict[str, Any]) -> List[SingleArrayVariable | SingleEnumVariable]:
+
+def parse_dataset_inputs(
+    json_data: Dict[str, Any],
+) -> List[SingleArrayVariable | SingleEnumVariable]:
     """Parse the dataset inputs from the JSON data.
-    
+
     Args:
         json_data: The JSON data to parse. Usually, the values of the "inputs" key of the response data.
 
@@ -293,18 +377,38 @@ def parse_dataset_inputs(json_data: Dict[str, Any]) -> List[SingleArrayVariable 
         inputs.append(infer_type(name, value))
     return inputs
 
+
 class InputSchema(SQLModel, table=True):
     __tablename__ = "input_schema"
     id: Optional[int] = Field(default=None, primary_key=True)
-    collection_id: int = Field(..., foreign_key="collection.id", description="Collection identifier")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
+    collection_id: int = Field(
+        ..., foreign_key="collection.id", description="Collection identifier"
+    )
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
 
-    collection: Optional["Collection"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"})
-    parameters: List["InputParameter"] = Relationship(back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    collection: Optional["Collection"] = Relationship(
+        back_populates="input_schema", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+    parameters: List["InputParameter"] = Relationship(
+        back_populates="input_schema",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        cascade_delete=True,
+    )
+    schema_constraints: Optional["SchemaConstraints"] = Relationship(
+        back_populates="input_schema",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        cascade_delete=True,
+    )
 
     @classmethod
-    def create_with_parameters(cls, response_data: Dict[str, Any], collection: Collection):
+    def create_with_parameters(
+        cls, response_data: Dict[str, Any], collection: Collection
+    ):
         """Create an input schema with parameters from the response data."""
         if "inputs" in response_data:
             inputs = response_data["inputs"]
@@ -319,31 +423,74 @@ class InputSchema(SQLModel, table=True):
                     name=input_var.name,
                     type=input_var.type,
                     values=input_var.values,
-                    choice=input_var.choice
+                    choice=input_var.choice,
                 )
             )
         return input_schema
 
+
 class InputParameter(SQLModel, table=True):
     __tablename__ = "input_parameter"
     id: Optional[int] = Field(default=None, primary_key=True)
-    input_schema_id: int = Field(..., foreign_key="input_schema.id", description="Input schema identifier")
+    input_schema_id: int = Field(
+        ..., foreign_key="input_schema.id", description="Input schema identifier"
+    )
     name: str = Field(..., description="Parameter name")
     title: str = Field(..., description="Parameter name")
-    type: ParamType = Field(sa_column=Column(Enum(ParamType)), description="Parameter type")
+    type: ParamType = Field(
+        sa_column=Column(Enum(ParamType)), description="Parameter type"
+    )
     values: List[str] = Field(sa_column=Column(JSON), description="Parameter values")
     choice: str = Field(..., description="Choice of the variable")
-    constraints: List["InputParameterConstraint"] = Relationship(back_populates="input_parameter")
-    input_schema: Optional["InputSchema"] = Relationship(back_populates="parameters", sa_relationship_kwargs={"lazy": "selectin"})
+    is_mandatory: Optional[bool] = Field(
+        None, description="Whether the parameter is mandatory"
+    )
+    constraints: List["InputParameterConstraint"] = Relationship(
+        back_populates="input_parameter"
+    )
+    input_schema: Optional["InputSchema"] = Relationship(
+        back_populates="parameters", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
+
+class SchemaConstraints(SQLModel, table=True):
+    __tablename__ = "schema_constraints"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    input_schema_id: int = Field(
+        ..., foreign_key="input_schema.id", description="Input schema identifier"
+    )
+    constraints: Dict[str, Any] = Field(
+        sa_column=Column(JSON), description="Constraints JSON data"
+    )
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
+
+    input_schema: Optional["InputSchema"] = Relationship(
+        back_populates="schema_constraints", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 class InputParameterConstraint(SQLModel, table=True):
     __tablename__ = "input_parameter_constraint"
     id: Optional[int] = Field(default=None, primary_key=True)
-    input_parameter_id: int = Field(..., foreign_key="input_parameter.id", description="Input parameter identifier")
+    input_parameter_id: int = Field(
+        ..., foreign_key="input_parameter.id", description="Input parameter identifier"
+    )
     constraint: str = Field(..., description="Constraint")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
-    input_parameter: Optional["InputParameter"] = Relationship(back_populates="constraints", sa_relationship_kwargs={"lazy": "selectin"})
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
+    input_parameter: Optional["InputParameter"] = Relationship(
+        back_populates="constraints", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 __tables__ = [
     Collection,
@@ -353,7 +500,9 @@ __tables__ = [
     CollectionLink,
     InputParameter,
     InputParameterConstraint,
+    SchemaConstraints,
 ]
+
 
 @dataclass
 class TableFilter:
@@ -362,6 +511,7 @@ class TableFilter:
     field: Optional[str] = None
     value: Optional[str] = None
     is_valid: bool = False
+
 
 class Tables(enum.Enum):
     collection = "collection"
@@ -397,7 +547,7 @@ class Tables(enum.Enum):
         if not parent:
             return None
         return parent
-    
+
     @property
     def parent_foreign_key(self) -> Optional[str]:
         parent: Optional[Tables] = self.immediate_parent
@@ -420,7 +570,9 @@ class Tables(enum.Enum):
         parent: Optional[Tables] = self.immediate_parent
         if not parent:
             return None
-        return select(self.model, parent.model).join(parent.model, self.parent_identifier == parent.model.id)
+        return select(self.model, parent.model).join(
+            parent.model, self.parent_identifier == parent.model.id
+        )
 
     @property
     def table_name(self) -> str:
@@ -432,7 +584,7 @@ class Tables(enum.Enum):
 
     def validate_filter_string(self, expression: str) -> TableFilter:
         """Validate a filter string for a table. Filters are of the form `table.field=value`.
-        
+
         Args:
             expression: The filter string to validate.
 
@@ -444,10 +596,12 @@ class Tables(enum.Enum):
         if not expression.startswith(self.table_name):
             return filter
         allowed_expressions = [f"{self.table_name}.{field}" for field in self.fields]
-        matching_expression = next((expr for expr in allowed_expressions if expression.startswith(expr)), None)
+        matching_expression = next(
+            (expr for expr in allowed_expressions if expression.startswith(expr)), None
+        )
         if not matching_expression:
             return filter
-        remainder = expression[len(matching_expression):].strip()
+        remainder = expression[len(matching_expression) :].strip()
         if not remainder.startswith("="):
             return filter
         filter.value = remainder[1:].strip()
@@ -458,7 +612,7 @@ class Tables(enum.Enum):
 
     def apply_filter(self, filter: TableFilter, session: Session) -> List[SQLModel]:
         """Apply a filter to a table. Returns a sequence of SQLModel objects.
-        
+
         Args:
             filter: The filter to apply.
         """
@@ -473,13 +627,27 @@ class Tables(enum.Enum):
 class Template(SQLModel, table=True):
     __tablename__ = "template"
     id: Optional[int] = Field(default=None, primary_key=True)
-    collection_id: int = Field(..., foreign_key="collection.id", description="Collection identifier")
+    collection_id: int = Field(
+        ..., foreign_key="collection.id", description="Collection identifier"
+    )
     name: str = Field(..., description="Template name")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    updated_at: datetime = Field(..., description="Last update timestamp", default_factory=datetime.now)
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    updated_at: datetime = Field(
+        ..., description="Last update timestamp", default_factory=datetime.now
+    )
 
-    parameters: List["TemplateParameter"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin", "cascade": "merge"}, cascade_delete=True)
-    history: List["TemplateHistory"] = Relationship(back_populates="template", sa_relationship_kwargs={"lazy": "selectin"}, cascade_delete=True)
+    parameters: List["TemplateParameter"] = Relationship(
+        back_populates="template",
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "merge"},
+        cascade_delete=True,
+    )
+    history: List["TemplateHistory"] = Relationship(
+        back_populates="template",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        cascade_delete=True,
+    )
 
     @computed_field
     @property
@@ -489,33 +657,66 @@ class Template(SQLModel, table=True):
         logger.debug(f"Parameter counts: {param_counts}")
         return prod(param_counts.values())
 
+
 class TemplateParameter(SQLModel, table=True):
     __tablename__ = "template_parameter"
     id: Optional[int] = Field(default=None, primary_key=True)
-    template_id: int = Field(..., foreign_key="template.id", description="Template identifier", ondelete="CASCADE")
+    template_id: int = Field(
+        ...,
+        foreign_key="template.id",
+        description="Template identifier",
+        ondelete="CASCADE",
+    )
     name: str = Field(..., description="Parameter name")
     value: str = Field(..., description="Parameter value")
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    template: Optional["Template"] = Relationship(back_populates="parameters", sa_relationship_kwargs={"lazy": "selectin"})
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    template: Optional["Template"] = Relationship(
+        back_populates="parameters", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 class TemplateHistory(SQLModel, table=True):
     __tablename__ = "template_history"
     id: Optional[int] = Field(default=None, primary_key=True)
-    template_id: int = Field(..., foreign_key="template.id", description="Template identifier", ondelete="CASCADE")
+    template_id: int = Field(
+        ...,
+        foreign_key="template.id",
+        description="Template identifier",
+        ondelete="CASCADE",
+    )
     data: Dict = Field(default_factory=dict, sa_column=Column(JSON))
-    created_at: datetime = Field(..., description="Creation timestamp", default_factory=datetime.now)
-    template: Optional["Template"] = Relationship(back_populates="history", sa_relationship_kwargs={"lazy": "selectin"})
-    cost_history: Optional["TemplateCostHistory"] = Relationship(back_populates="history", sa_relationship_kwargs={"lazy": "selectin"})
+    created_at: datetime = Field(
+        ..., description="Creation timestamp", default_factory=datetime.now
+    )
+    template: Optional["Template"] = Relationship(
+        back_populates="history", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+    cost_history: Optional["TemplateCostHistory"] = Relationship(
+        back_populates="history", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 class TemplateCostHistory(SQLModel, table=True):
     __tablename__ = "template_cost_history"
     id: Optional[int] = Field(default=None, primary_key=True)
-    history_id: int = Field(..., foreign_key="template_history.id", description="History identifier", ondelete="CASCADE")
+    history_id: int = Field(
+        ...,
+        foreign_key="template_history.id",
+        description="History identifier",
+        ondelete="CASCADE",
+    )
     cost: float = Field(..., description="Cost of the template")
     limit: float = Field(..., description="Limit of the template")
     request_is_valid: bool = Field(..., description="Whether the request is valid")
-    invalid_reason: Optional[str] = Field(None, description="Reason the request is invalid")
-    history: Optional["TemplateHistory"] = Relationship(back_populates="cost_history", sa_relationship_kwargs={"lazy": "selectin"})
+    invalid_reason: Optional[str] = Field(
+        None, description="Reason the request is invalid"
+    )
+    history: Optional["TemplateHistory"] = Relationship(
+        back_populates="cost_history", sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
 
 @dataclass
 class CostEstimate:
@@ -530,14 +731,11 @@ class CostEstimate:
             cost=response["cost"],
             limit=response["limit"],
             request_is_valid=response["request_is_valid"],
-            invalid_reason=response["invalid_reason"]
+            invalid_reason=response["invalid_reason"],
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            attr : getattr(self, attr)
-            for attr in self.__dataclass_fields__
-        }
+        return {attr: getattr(self, attr) for attr in self.__dataclass_fields__}
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict())

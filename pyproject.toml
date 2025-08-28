@@ -22,6 +22,7 @@ dependencies = [
     "sqlmodel>=0.0.24",
     "aiosqlite>=0.21.0",
     "multimethod>=2.0",
+    "polars>=1.32.3",
 ]
 
 [build-system]
