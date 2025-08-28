@@ -203,14 +203,25 @@ def history(
 @app.command(name="required", hidden=True)
 @app.command(
     name="mandatory",
-    help="Show the mandatory parameters of a template (aliases: req, required, mandatory)",
+    help=(
+        "Show the mandatory parameters of a template (aliases: req, required, mandatory)."
+        "If --check is provided, the template is validated and the result is printed as a JSON object."
+        "If --check is not provided, the mandatory parameters are printed as a newline-separated list of parameter names."
+    ),
 )
 def mandatory(
     template_name: str = typer.Argument(..., help="Template name"),
+    check: bool = typer.Option(
+        False, "--check", "-c", help="Check if the template is valid"
+    ),
 ):
     template_updater = TemplateUpdater(template_name)
     browser = CollectionBrowser(template_updater.dataset_id)
-    console.print("\n".join(browser.mandatory_parameters))
+    validated_fields = browser.validate_template(template_updater.template)
+    if check:
+        console.print(validated_fields)
+    else:
+        console.print("\n".join(browser.mandatory_parameters))
 
 
 default_output_dir = Path(gettempdir()) / "cds_download"

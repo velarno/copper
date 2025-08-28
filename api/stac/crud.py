@@ -319,6 +319,23 @@ class CollectionBrowser:
 
         return [param.name for param in self.parameters if param.is_mandatory]
 
+    def validate_template(self, template: Template) -> Dict[str, bool]:
+        """Validates a template against the constraints.
+        Returns a dictionary of mandatory parameter names and their validation status.
+        If a parameter is not in the constraints, it is skipped (no check is done).
+        If a parameter is in the constraints, it is considered valid if *at least one* of its values is in the template.
+        """
+        # TODO: add a check for parameter values
+        if not self.constraints:
+            raise ValueError(f"No constraints found for {self.dataset_id}")
+        mandatory_parameter_names = self.mandatory_parameters
+        validated_fields: dict[str, bool] = {
+            pname: any(param.name == pname for param in template.parameters)
+            for pname in mandatory_parameter_names
+        }
+        logger.debug(f"Validated fields: {validated_fields}")
+        return validated_fields
+
 
 def state_cost_estimate(data: dict) -> CostEstimate:
     """

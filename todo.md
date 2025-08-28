@@ -11,6 +11,11 @@
 - [ ] Add logic to fetch the budget from costing api if it is not set so far (dummy value of -1)
 - [x] Create a basic template optimizer
 
+## User Experience & Documentation
+
+- [ ] Create minimal docs
+- [ ] Ensure command aliases print the same help message (e.g. the `copper tpl req` help message)
+
 ## Db related
 
 - [ ] Handle duplicate values better
@@ -21,6 +26,7 @@
 ## Logic & Efficiency
 
 - [ ] Try to check if other optim approaches get bigger gains when the expected n-th split along the same dim would yield a small improvement
+- [ ] Add methods to fetch parameters grouped by name
 
 ## Testing
 
