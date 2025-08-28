@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+*.db
 datasets.db
 datasets.db.bak
 datasets.db-shm
