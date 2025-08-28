@@ -47,10 +47,20 @@ def drop_table(table_name: str):
     SQLModel.metadata.drop_all(engine, [table_name])
 
 
+def is_catalog_loaded() -> bool:
+    """Check if the catalog has been loaded into the database."""
+    try:
+        with Session(engine, expire_on_commit=False) as session:
+            return session.exec(select(Collection).limit(1)).first() is not None
+    except Exception as e:
+        logger.error(f"Error checking if catalog is loaded: {e}")
+        raise e
+
+
 def insert_catalog_links(catalog_links: List[CatalogLink]):
     """Insert catalog links into the database."""
     try:
-        with Session(engine) as session:
+        with Session(engine, expire_on_commit=False) as session:
             session.add_all(catalog_links)
             session.commit()
     except Exception as e:
@@ -61,7 +71,7 @@ def insert_catalog_links(catalog_links: List[CatalogLink]):
 def insert_collections(collections: List[Collection]):
     """Insert collections into the database."""
     try:
-        with Session(engine) as session:
+        with Session(engine, expire_on_commit=False) as session:
             session.add_all(collections)
             session.commit()
     except Exception as e:

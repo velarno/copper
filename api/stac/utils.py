@@ -1,14 +1,16 @@
 import json
+import logging
 import requests
-from typing import List, Union, Optional
+from typing import List, Union
 
-from storage.datasets import connect_to_database
 from .client import stac_client
-from display import with_progress
 from rich.table import Table
 from sqlmodel import SQLModel
 
 COPERNICUS_STAC_URL = r"https://cds.climate.copernicus.eu/api/catalogue/v1/"
+
+logger = logging.getLogger(__name__)
+
 
 def fetch_collection_links() -> list[dict]:
     url = COPERNICUS_STAC_URL
@@ -17,15 +19,6 @@ def fetch_collection_links() -> list[dict]:
     data = response.json()
     return data.get("links", [])
 
-def store_collection_links(links: list[dict]):
-    con = connect_to_database()
-    for link in links:
-        con.execute(
-            "INSERT INTO stac_catalogue_links (rel, mimetype, collection_url, title) VALUES (?, ?, ?, ?)",
-            (link["rel"], link["type"], link["href"], link["title"] if "title" in link else None)
-            )
-    con.commit()
-    con.close()
 
 def fetch_collection_data(collection_url: str) -> tuple[dict, list[dict], list[dict]]:
     url = collection_url
@@ -44,87 +37,41 @@ def fetch_collection_data(collection_url: str) -> tuple[dict, list[dict], list[d
     }
     return collection_info, links, keywords
 
-@with_progress
-def fetch_all_collections(silent: bool = False) -> list[dict]:
-    con = connect_to_database()
-    collections = con.execute("SELECT * FROM stac_catalogue_links where rel = 'child'").fetchall()
-    for collection in with_progress(collections, silent=silent):
-        collection_info, links, keywords = fetch_collection_data(collection[3])
-        store_collection_data(collection_info, links, keywords)
-    return collections
-
-def store_collection_data(collection_info: dict, links: list[dict], keywords: list[dict]):
-    con = connect_to_database()
-    collection_query = con.execute(
-        "INSERT OR REPLACE INTO stac_collections (collection_id, title, description, published_at, modified_at, doi) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-        (collection_info["collection_id"], collection_info["title"], collection_info["description"], collection_info["published_at"], collection_info["modified_at"], collection_info["doi"])
-    )
-    collection_id = collection_query.fetchone()[0]
-
-    for keyword in keywords:
-        con.execute(
-            "INSERT INTO stac_keywords (keyword, collection_id) VALUES (?, ?)",
-            (keyword, collection_id)
-        )
-    for link in links:
-        con.execute(
-            "INSERT INTO stac_links (url, mimetype, title, collection_id) VALUES (?, ?, ?, ?)",
-            (link["href"], link["type"] if "type" in link else None, link["title"] if "title" in link else None, collection_id)
-        )
-    con.commit()
-    con.close()
-
-# New costings-related utility functions
-def fetch_collection_variables(collection_id: str) -> list[dict]:
-    """Fetch variables for a collection using the STAC client."""
-    variables = stac_client.fetch_collection_variables(collection_id)
-    return [var.model_dump() for var in variables]
-
-def fetch_collection_constraints(collection_id: str) -> list[dict]:
-    """Fetch constraint sets for a collection using the STAC client."""
-    constraints = stac_client.fetch_collection_constraints(collection_id)
-    return [constraint.model_dump() for constraint in constraints]
-
-def get_collection_info(collection_id: str) -> dict:
-    """Get basic information about a collection."""
-    return stac_client.get_collection_info(collection_id) or {}
 
 def list_available_collections() -> list[dict]:
     """List all available collections."""
     return stac_client.list_collections()
 
+
 def search_collections(query: str) -> list[dict]:
     """Search collections by query."""
     return stac_client.search_collections(query)
+
 
 def estimate_request_cost(collection_id: str, request_data: dict) -> dict:
     """Estimate the cost of a request."""
     cost_estimate = stac_client.estimate_request_cost(collection_id, request_data)
     return cost_estimate.model_dump()
 
-def validate_request(collection_id: str, request_data: dict) -> dict:
-    """Validate a request against collection constraints."""
-    validation_result = stac_client.validate_request(collection_id, request_data)
-    return validation_result.model_dump()
 
-def get_collection_variables_from_db(collection_id: str, search: Optional[str] = None) -> list[dict]:
-    """Get variables for a collection from the database."""
-    from .database import get_variables
-    variables = get_variables(collection_id, search)
-    return [var.model_dump() for var in variables]
-
-def get_collection_constraints_from_db(collection_id: str) -> list[dict]:
-    """Get constraint sets for a collection from the database."""
-    from .database import get_constraints
-    constraints = get_constraints(collection_id)
-    return [constraint.model_dump() for constraint in constraints]
-
-def models_to_json(models: Union[List[SQLModel], SQLModel], hide_values: bool = False) -> str:
+def models_to_json(
+    models: Union[List[SQLModel], SQLModel], hide_values: bool = False
+) -> str:
     """Convert SQLModel instances to JSON string. Accepts either a single model or a list of models."""
     if isinstance(models, list):
-        return json.dumps([model.model_dump(mode="json", exclude_none=hide_values) for model in models])
+        return json.dumps(
+            [
+                model.model_dump(mode="json", exclude_none=hide_values)
+                for model in models
+            ]
+        )
     else:
-        return json.dumps(models.model_dump(mode="json", exclude_none=hide_values))
+        try:
+            return json.dumps(models.model_dump(mode="json", exclude_none=hide_values))
+        except Exception as e:
+            logger.error(f"Error converting models to JSON: {e}")
+            raise e
+
 
 def models_to_table(models: Union[List[SQLModel], SQLModel]) -> Table:
     """Convert SQLModel instances to Rich table. Accepts either a single model or a list of models."""
