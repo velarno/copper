@@ -1,5 +1,7 @@
 # Copper CLI tool
 
+[![codecov](https://codecov.io/github/velarno/copper/branch/main/graph/badge.svg?token=AWCA8AKF6O)](https://codecov.io/github/velarno/copper)
+
 Copper CLI is a command-line tool for interacting with Copernicus Climate Data Store (CDS) datasets. It provides the following features:
 
 ## Features
@@ -42,7 +44,7 @@ copper datasets search "sea level"
 ```
 This returns a table:
 ```bash
-                                        Search Results for 'sea level'                                         
+                                        Search Results for 'sea level'
 ╭───────┬────────────────────────────────────────────────────┬───────────────────────┬────────────────────────╮
 │ Score │ ID                                                 │ Title                 │ Description            │
 ├───────┼────────────────────────────────────────────────────┼───────────────────────┼────────────────────────┤
