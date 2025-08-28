@@ -248,10 +248,17 @@ class CollectionBrowser:
         # TODO: add a local db store for constraints JSON
         """Constraints on input parameters. Fetches the constraints from the API endpoint, only called if not already fetched."""
         if not self._constraints:
-            if self.input_schema.schema_constraints:
-                self._constraints = self.input_schema.schema_constraints.constraints
-            else:
-                self._constraints = self.fetch_constraints()
+            with self.session:
+                logger.info(
+                    f"Input schema: {type(self.input_schema)} with constraints: {type(self.input_schema.schema_constraints)}"
+                )
+                if self.input_schema.schema_constraints:
+                    self._constraints = self.input_schema.schema_constraints.constraints
+                else:
+                    logger.info(
+                        f"No constraints found for {self.dataset_id}, fetching from API"
+                    )
+                    self.fetch_constraints()
         return self._constraints
 
     def fetch_constraints(self) -> Optional[dict]:
