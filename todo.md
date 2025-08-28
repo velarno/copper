@@ -15,6 +15,7 @@
 
 - [ ] Create minimal docs
 - [ ] Ensure command aliases print the same help message (e.g. the `copper tpl req` help message)
+- [ ] Add sensible default flag option to fill missing mandatory fields
 
 ## Db related
 
@@ -27,6 +28,7 @@
 
 - [ ] Try to check if other optim approaches get bigger gains when the expected n-th split along the same dim would yield a small improvement
 - [ ] Add methods to fetch parameters grouped by name
+- [ ] Before downloading template, run checks for mandatory params & cost
 
 ## Testing
 
