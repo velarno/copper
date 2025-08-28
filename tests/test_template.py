@@ -1,9 +1,7 @@
-import asyncio
 import pytest
 
 from pathlib import Path
 
-from api.stac.client import async_stac_client, init_all_collections
 from api.stac.crud import TemplateUpdater, is_catalog_loaded
 from api.stac.optimizer import TemplateOptimizer
 
@@ -21,13 +19,6 @@ def sample_template():
 @pytest.fixture
 def sample_template_updater():
     return template_updater
-
-
-@pytest.mark.critical
-def load_catalog():
-    if not is_catalog_loaded():
-        collections = asyncio.run(init_all_collections())
-        async_stac_client.persist_all(collections)
 
 
 @pytest.mark.critical

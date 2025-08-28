@@ -5,7 +5,10 @@ This file ensures critical system checks run before any tests execute.
 """
 
 import pytest
+import asyncio
+
 from api.stac.crud import is_catalog_loaded
+from api.stac.client import async_stac_client, init_all_collections
 
 
 def pytest_configure(config):
@@ -24,17 +27,11 @@ def pytest_sessionstart(session):
     """
     try:
         if not is_catalog_loaded():
-            pytest.fail(
-                "CRITICAL: STAC catalog is not loaded. "
-                "All tests will fail. "
-                "Please ensure the catalog is initialized before running tests.\n"
-                "You may need to run: python -m api.stac.commands init"
-            )
-    except Exception as e:
+            collections = asyncio.run(init_all_collections())
+            async_stac_client.persist_all(collections)
+    except Exception:
         pytest.fail(
-            f"CRITICAL: Failed to check if STAC catalog is loaded: {e}\n"
-            "This indicates a serious system configuration issue. "
-            "Please check your database connection and STAC configuration."
+            "Failed to load STAC catalog and its collections, most tests will fail."
         )
 
 
