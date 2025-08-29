@@ -1,0 +1,62 @@
+{
+    "metadata": {
+        "dataset_id": "derived-era5-single-levels-daily-statistics",
+        "template_name": "test_template"
+    },
+    "parameters": {
+        "product_type": [
+            "ensemble_mean"
+        ],
+        "daily_statistic": [
+            "daily_mean",
+            "daily_maximum",
+            "daily_minimum"
+        ],
+        "year": [
+            "2010",
+            "2011",
+            "2012",
+            "2013",
+            "2014",
+            "2015",
+            "2016",
+            "2017",
+            "2018",
+            "2019"
+        ],
+        "month": [
+            "03",
+            "04",
+            "11",
+            "12"
+        ],
+        "day": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15"
+        ],
+        "frequency": [
+            "1_hourly"
+        ],
+        "variable": [
+            "total_column_ozone",
+            "total_precipitation",
+            "top_net_thermal_radiation"
+        ],
+        "time_zone": [
+            "utc+00:00"
+        ]
+    }
+}

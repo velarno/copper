@@ -205,8 +205,8 @@ class CollectionBrowser:
             raise ValueError(f"No constraints found for {self.dataset_id}")
 
     def refresh(self):
+        # TODO: add constraint refresh without creating duplicates
         self.parameters = self.fetch_parameters()
-        self.fetch_constraints()
 
     def fetch_parameters(self) -> List[InputParameter]:
         with self.session as session:

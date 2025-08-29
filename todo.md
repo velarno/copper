@@ -20,7 +20,8 @@
 ## Db related
 
 - [ ] Handle duplicate values better
-- [ ] Add logic to store mandatory params
+- [x] Add logic to store mandatory params
+- [ ] Add unique constraint to input_schema on constraint table to avoid duplicates
 - [ ] Add some field on template to help distinguish between templates & sub-templates
 - [ ] Add some fields on template to indicate if it was downloaded & some machine id + time
 
