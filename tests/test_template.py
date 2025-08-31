@@ -56,7 +56,7 @@ def test_remove_parameter_values_update_cost(sample_template_updater):
 def test_template_optimizer(sample_template_updater):
     template_updater = sample_template_updater
     optimizer = TemplateOptimizer(template_updater=template_updater, budget=400)
-    templates = optimizer.ensure_budget("year")
+    templates = optimizer.ensure_budget()
     assert len(templates) > 0
     assert not (any(optimizer.cost(template) > 400 for template in templates))
 

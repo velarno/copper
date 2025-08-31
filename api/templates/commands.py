@@ -302,7 +302,7 @@ def optimize(
 ):
     template_updater = TemplateUpdater(template_name)
     optimizer = TemplateOptimizer(template_updater, budget=budget)
-    optimizer.ensure_budget(name="year")
+    optimizer.ensure_budget()
     if dry_run:
         console.print("Dry run, no templates were created")
         console.print(

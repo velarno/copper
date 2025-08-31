@@ -1,13 +1,10 @@
-{'day': 30, 'year': 20, 'month': 8, 'daily_statistic': 6, 'variable': 6, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 1382400 (1 parent)
-{'day': 30, 'year': 10, 'month': 8, 'daily_statistic': 6, 'variable': 6, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 76800 (2 children)
-{'day': 15, 'year': 10, 'month': 8, 'daily_statistic': 6, 'variable': 6, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 38400 (4 children)
-{'day': 5, 'year': 5, 'month': 8, 'daily_statistic': 6, 'variable': 6, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 12800 (12 children)
-{'day': 5, 'year': 5, 'month': 4, 'daily_statistic': 6, 'variable': 6, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 6400 (24 children)
-{'day': 5, 'year': 5, 'month': 4, 'daily_statistic': 3, 'variable': 6, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 3200 (48 children)
-{'day': 5, 'year': 5, 'month': 4, 'daily_statistic': 3, 'variable': 3, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 1600 (96 children)
-{'day': 5, 'year': 5, 'month': 2, 'daily_statistic': 3, 'variable': 3, 'product_type': 2, 'frequency': 2, 'time_zone': 2} # cost 800 (192 children)
-{'day': 5, 'year': 5, 'month': 2, 'daily_statistic': 3, 'variable': 3, 'product_type': 2, 'frequency': 2, 'time_zone': 1} # cost 400 (384 children)
-## Splitting rules:
+{'day': 25, 'year': 20, 'month': 10, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 180000 (1 parent)
+{'day': 5, 'year': 20, 'month': 10, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 36000 (5 children)
+{'day': 5, 'year': 10, 'month': 10, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 18000 (10 children)
+{'day': 5, 'year': 5, 'month': 10, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 9000 (20 children)
+{'day': 5, 'year': 5, 'month': 5, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 4500 (40 children)
+{'day': 1, 'year': 5, 'month': 5, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 900 (200 children)
+{'day': 1, 'year': 1, 'month': 5, 'daily_statistic': 3, 'variable': 3, 'product_type': 1, 'frequency': 2, 'time_zone': 2} # cost 180 (1000 children)
 ## @if cost > budget:
 ## - split by the parameter with the highest non-prime count
 ## - -> if count % 2 == 0, split by 2, else if count % 3 == 0, split by 3, else ...

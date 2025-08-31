@@ -97,40 +97,39 @@ class TemplateOptimizer:
         self.queue.append(self.template_updater.to_dict())
         self.budget = budget
 
-    def split_parameters(self, name: str, state: TemplateState) -> None:
+    def split_parameters(self, name: str, state: TemplateState, factor: int) -> None:
         param_values = state[name]
+        logger.info(f"splitting parameter {name} with factor {factor}")
         num_params = len(param_values) if isinstance(param_values, list) else 1
-        cutoff = num_params // 2
 
-        first, second = deepcopy(state), deepcopy(state)
-        del first[name], second[name]
-        first[name] = (
-            param_values[cutoff:] if isinstance(param_values, list) else param_values
-        )
-        second[name] = (
-            param_values[:cutoff] if isinstance(param_values, list) else param_values
-        )
+        step: int = num_params // factor
+        cutoffs: list[int] = [
+            *range(0, num_params, step),
+            -1,
+        ]
+        logger.info(f"cutoffs: {cutoffs}")
 
-        if self.cost(first) > self.budget:
-            logger.info(
-                f"splitting sub-template with cost = {self.cost(first)} > {self.budget}"
+        for low, high in zip(cutoffs[:-1], cutoffs[1:]):
+            split = deepcopy(state)
+            del split[name]
+            split[name] = (
+                param_values[low:high]
+                if isinstance(param_values, list)
+                else param_values
             )
-            self.queue.append(first)
-        else:
-            logger.info(
-                f"appending sub-template with cost = {self.cost(first)} <= {self.budget}"
-            )
-            self.valid.append(first)
-        if self.cost(second) > self.budget:
-            logger.info(
-                f"splitting sub-template with cost = {self.cost(second)} > {self.budget}"
-            )
-            self.queue.append(second)
-        else:
-            logger.info(
-                f"appending sub-template with cost = {self.cost(second)} <= {self.budget}"
-            )
-            self.valid.append(second)
+            self.queue.append(split)
+
+    def split_largest_cardinality_parameter(self, state: TemplateState) -> None:
+        """
+        Splits the largest cardinality parameter of the state by its factor.
+
+        Args:
+            state: TemplateState the state to split
+        """
+        cardinalities, factors = param_factors(state)
+        largest_cardinality_parameter = max(cardinalities, key=cardinalities.get)
+        factor = factors[largest_cardinality_parameter]
+        self.split_parameters(largest_cardinality_parameter, state, factor)
 
     def cost(self, state: TemplateState) -> float:
         # TODO: centralize cost calculation and import it here
@@ -146,7 +145,7 @@ class TemplateOptimizer:
     def min_cost(self) -> float:
         return min(self.costs)
 
-    def ensure_budget(self, name: str):
+    def ensure_budget(self):
         # TODO: use a priority queue to split the highest cost state
         # TODO: enqueue the over budget states, each step pop the highest cost state & split it
         # TODO: if the state is under budget, yield it
@@ -162,7 +161,7 @@ class TemplateOptimizer:
                 logger.info(
                     f"splitting sub-template with cost = {cost} > {self.budget}"
                 )
-                self.split_parameters(name, state)
+                self.split_largest_cardinality_parameter(state)
         return list(self.valid)
 
     def templates_as_json(self) -> List[dict]:
@@ -192,7 +191,7 @@ if __name__ == "__main__":
     optimizer = TemplateOptimizer(template_name="expensive", budget=400)
     print(optimizer.template_updater.to_json())
     print(optimizer.cost(optimizer.template_updater.to_dict()))
-    templates = optimizer.ensure_budget("year")
+    templates = optimizer.ensure_budget()
     for template in templates:
         print(template)
     optimizer.persist_templates()
