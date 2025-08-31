@@ -1,6 +1,7 @@
 # Copper CLI tool
 
 [![codecov](https://codecov.io/github/velarno/copper/branch/main/graph/badge.svg?token=AWCA8AKF6O)](https://codecov.io/github/velarno/copper)
+[![tests](https://github.com/velarno/copper/actions/workflows/test.yml/badge.svg)]
 
 Copper CLI is a command-line tool for interacting with Copernicus Climate Data Store (CDS) datasets. It provides the following features:
 
