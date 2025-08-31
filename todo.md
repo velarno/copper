@@ -24,6 +24,7 @@
 - [ ] Add unique constraint to input_schema on constraint table to avoid duplicates
 - [ ] Add some field on template to help distinguish between templates & sub-templates
 - [ ] Add some fields on template to indicate if it was downloaded & some machine id + time
+- [ ] Importing a template JSON file with existing name & specifying `--name` doesn't work as expected (it should override the name in the file, as of now it uses the file's name field)
 
 ## Logic & Efficiency
 

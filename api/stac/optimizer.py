@@ -2,11 +2,59 @@ import json
 import logging
 from copy import deepcopy
 from math import prod
-from collections import deque
-from typing import Optional, List
+from collections import deque, OrderedDict
+from typing import Optional, List, Dict, TypeVar, Union
 from api.stac.crud import TemplateUpdater, add_metadata
 
 logger = logging.getLogger(__name__)
+
+TemplateState = TypeVar("TemplateState", bound=Dict[str, Union[list[str], str, int]])
+TemplateCardinalities = TypeVar("TemplateCardinalities", bound=Dict[str, int])
+
+
+def param_cardinalities(state: TemplateState) -> TemplateCardinalities:
+    return {
+        name: max(1, len(values) if isinstance(values, list) else 1)
+        for name, values in state.items()
+    }
+
+
+def cost_from_cardinalities(cardinalities: TemplateCardinalities) -> float:
+    return prod(cardinalities.values())
+
+
+def param_factors(state: TemplateState) -> tuple[dict[str, int], OrderedDict[str, int]]:
+    """
+    Given a template state, returns a tuple of:
+      - cardinalities: dict mapping parameter names to their cardinality (number of values)
+      - factors: OrderedDict mapping parameter names to their smallest prime factor (from a fixed list) dividing their cardinality
+    """
+    cardinalities: dict[str, int] = param_cardinalities(state)
+    factors: OrderedDict[str, int] = OrderedDict()
+    prime_factors: List[int] = [
+        2,
+        3,
+        5,
+        7,
+        11,
+        13,
+        17,
+        19,
+    ]  # TODO: check if more prime factors needed
+
+    def sort_by_cardinality(cards: dict[str, int]) -> OrderedDict[str, int]:
+        # Sorts the cardinalities in descending order of value
+        return OrderedDict(sorted(cards.items(), reverse=True, key=lambda x: x[1]))
+
+    for name, cardinality in sort_by_cardinality(cardinalities).items():
+        for factor in prime_factors:
+            if cardinality % factor == 0:
+                factors[name] = factor
+                break
+        if cardinality == 1:
+            break
+    return cardinalities, factors
+
 
 class TemplateOptimizer:
     """
@@ -23,56 +71,75 @@ class TemplateOptimizer:
         highest_cost_index: int index of the highest cost template
         highest_cost: float highest cost of the templates
     """
+
     template_updater: TemplateUpdater
     budget: float
     splits: List[dict]
     costs: List[float]
     highest_cost_index: int
-    
-    def __init__(self,
+
+    def __init__(
+        self,
         template_updater: Optional[TemplateUpdater] = None,
         template_name: Optional[str] = None,
-        budget: Optional[float] = None
-        ) -> None:
+        budget: Optional[float] = None,
+    ) -> None:
         if template_updater:
             self.template_updater = template_updater
         elif template_name:
             self.template_updater = TemplateUpdater(template_name=template_name)
         else:
-            raise ValueError("Either template_updater or template_name must be provided")
+            raise ValueError(
+                "Either template_updater or template_name must be provided"
+            )
         self.valid = deque()
         self.queue = deque()
         self.queue.append(self.template_updater.to_dict())
         self.budget = budget
 
-    def split_parameters(self, name: str, state: dict) -> None:
+    def split_parameters(self, name: str, state: TemplateState) -> None:
         param_values = state[name]
-        num_params = len(param_values)
+        num_params = len(param_values) if isinstance(param_values, list) else 1
         cutoff = num_params // 2
-        
+
         first, second = deepcopy(state), deepcopy(state)
         del first[name], second[name]
-        first[name] = param_values[cutoff:]
-        second[name] = param_values[:cutoff]
+        first[name] = (
+            param_values[cutoff:] if isinstance(param_values, list) else param_values
+        )
+        second[name] = (
+            param_values[:cutoff] if isinstance(param_values, list) else param_values
+        )
 
         if self.cost(first) > self.budget:
-            logger.info(f"splitting sub-template with cost = {self.cost(first)} > {self.budget}")
+            logger.info(
+                f"splitting sub-template with cost = {self.cost(first)} > {self.budget}"
+            )
             self.queue.append(first)
         else:
-            logger.info(f"appending sub-template with cost = {self.cost(first)} <= {self.budget}")
+            logger.info(
+                f"appending sub-template with cost = {self.cost(first)} <= {self.budget}"
+            )
             self.valid.append(first)
         if self.cost(second) > self.budget:
-            logger.info(f"splitting sub-template with cost = {self.cost(second)} > {self.budget}")
+            logger.info(
+                f"splitting sub-template with cost = {self.cost(second)} > {self.budget}"
+            )
             self.queue.append(second)
         else:
-            logger.info(f"appending sub-template with cost = {self.cost(second)} <= {self.budget}")
+            logger.info(
+                f"appending sub-template with cost = {self.cost(second)} <= {self.budget}"
+            )
             self.valid.append(second)
 
-    def cost(self, state: dict) -> float:
+    def cost(self, state: TemplateState) -> float:
         # TODO: centralize cost calculation and import it here
-        num_params = {name: max(1, len(values)) for name, values in state.items()}
+        num_params = {
+            name: max(1, len(values) if isinstance(values, list) else 1)
+            for name, values in state.items()
+        }
         return prod(num_params.values())
-    
+
     def total_cost(self) -> float:
         return sum(self.costs)
 
@@ -87,15 +154,19 @@ class TemplateOptimizer:
             state = self.queue.pop()
             cost = self.cost(state)
             if cost <= self.budget:
-                logger.info(f"appending sub-template with cost = {cost} <= {self.budget}")
+                logger.info(
+                    f"appending sub-template with cost = {cost} <= {self.budget}"
+                )
                 self.valid.append(state)
             else:
-                logger.info(f"splitting sub-template with cost = {cost} > {self.budget}")
+                logger.info(
+                    f"splitting sub-template with cost = {cost} > {self.budget}"
+                )
                 self.split_parameters(name, state)
         return list(self.valid)
 
     def templates_as_json(self) -> List[dict]:
-        return [ json.dumps(template) for template in self.valid ]
+        return [json.dumps(template) for template in self.valid]
 
     def export_templates(self, prefix: str) -> None:
         for i, template in enumerate(self.valid):
@@ -112,9 +183,10 @@ class TemplateOptimizer:
                 add_metadata(
                     tpl_state,
                     self.template_updater.dataset_id,
-                    f"{prefix}_{base_name}_{padded_index}"
+                    f"{prefix}_{base_name}_{padded_index}",
                 )
             )
+
 
 if __name__ == "__main__":
     optimizer = TemplateOptimizer(template_name="expensive", budget=400)

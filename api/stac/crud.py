@@ -351,12 +351,11 @@ def state_cost_estimate(data: dict) -> CostEstimate:
     """
     Estimate the cost of a template (in python dict format)
     """
-    n_params: Dict[str, int] = {
-        key: len(values) if isinstance(values, list) else 1
-        for key, values in data.items()
-    }
+    num_params = {name: max(1, len(values)) for name, values in data.items()}
+    cost = prod(num_params.values())
+    logger.debug(f"Cost estimate: {cost}")
     return CostEstimate(
-        cost=max(1, prod(n_params.values())),
+        cost=cost,
         limit=-1,
         request_is_valid=True,
         invalid_reason=None,
@@ -719,8 +718,13 @@ class TemplateUpdater:
         self.commit()
 
     def _estimate_cost(self) -> CostEstimate:
-        data = self.to_dict()
-        return state_cost_estimate(data)
+        total_cost = self.template.cost
+        return CostEstimate(
+            cost=total_cost,
+            limit=-1,
+            request_is_valid=True,
+            invalid_reason=None,
+        )
 
     def _fetch_cost(self) -> CostEstimate:
         client = httpx.Client()
@@ -770,7 +774,9 @@ class TemplateUpdater:
                 template = Template(
                     name=metadata["template_name"],
                     collection_id=collection.id,
-                    cost=state_cost_estimate(parameters).cost,
+                    cost=state_cost_estimate(
+                        parameters
+                    ).cost,  # TODO: remove this in favor of computed attribute
                 )
                 session.add(template)
 
